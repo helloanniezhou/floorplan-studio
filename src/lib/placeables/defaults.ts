@@ -4,6 +4,7 @@ import type {
   PlaceableDimensions,
 } from '../../types/floorPlan';
 import { feetToMeters } from '../geometry/vectors';
+import { bedDimensionsForSize, DEFAULT_BED_SIZE } from './beds';
 
 /** Typical California / US residential furniture sizes (feet). Plan: width × depth; height is vertical. */
 const FURNITURE_DEFAULTS_FT: Record<FurnitureKind, PlaceableDimensions> = {
@@ -23,6 +24,10 @@ const FURNITURE_DEFAULTS_FT: Record<FurnitureKind, PlaceableDimensions> = {
   gasRange: { width: 2.5, depth: 2.25, height: 3 },
   /** 36" wide × 70" tall standard refrigerator */
   fridge: { width: 3, depth: 2.5, height: 6 },
+  /** Queen mattress (overridden by bed size preset) */
+  bed: { width: 5, depth: 6.67, height: 2.5 },
+  /** Typical nightstand ~24" × 18" */
+  nightstand: { width: 2, depth: 1.5, height: 2.5 },
 };
 
 function scaleDimensions(
@@ -41,6 +46,7 @@ export function defaultFurnitureDimensions(
   kind: FurnitureKind,
   unit: 'm' | 'ft',
 ): PlaceableDimensions {
+  if (kind === 'bed') return bedDimensionsForSize(DEFAULT_BED_SIZE, unit);
   const ft = FURNITURE_DEFAULTS_FT[kind];
   if (unit === 'ft') return { ...ft };
   return scaleDimensions(ft, feetToMeters(1));
@@ -83,6 +89,8 @@ export const FURNITURE_LABELS: Record<FurnitureKind, string> = {
   chair: 'Chair',
   gasRange: 'Gas range',
   fridge: 'Fridge',
+  bed: 'Bed',
+  nightstand: 'Nightstand',
 };
 
 export const LANDSCAPE_LABELS: Record<LandscapeKind, string> = {
@@ -104,6 +112,8 @@ export const FURNITURE_COLORS: Record<FurnitureKind, string> = {
   chair: '#78716c',
   gasRange: '#44403c',
   fridge: '#cbd5e1',
+  bed: '#ddd6fe',
+  nightstand: '#d6d3d1',
 };
 
 export const LANDSCAPE_COLORS: Record<LandscapeKind, string> = {

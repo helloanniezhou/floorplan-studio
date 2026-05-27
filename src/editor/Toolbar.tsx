@@ -28,6 +28,8 @@ const FURNITURE_ITEMS: { kind: FurnitureKind; icon: string }[] = [
   { kind: 'chair', icon: '◫' },
   { kind: 'gasRange', icon: '▦' },
   { kind: 'fridge', icon: '▥' },
+  { kind: 'bed', icon: '▭' },
+  { kind: 'nightstand', icon: '▫' },
 ];
 
 const LANDSCAPE_ITEMS: { kind: LandscapeKind; icon: string }[] = [

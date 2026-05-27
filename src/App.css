@@ -570,7 +570,9 @@ body {
 }
 
 .field input[type='number'],
-.field input[type='text'] {
+.field input[type='text'],
+.field select,
+.field-select {
   padding: 0.35rem 0.5rem;
   border: 1px solid #e5e2db;
   border-radius: 4px;

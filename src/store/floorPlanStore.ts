@@ -30,6 +30,7 @@ import {
   defaultFurnitureDimensions,
   LANDSCAPE_DEFAULTS,
 } from '../lib/placeables/defaults';
+import { bedDimensionsForSize, DEFAULT_BED_SIZE } from '../lib/placeables/beds';
 import { convertWallsToWorld, clampOpeningOnWall } from '../lib/geometry/units';
 import {
   rectangleFromCorners,
@@ -664,7 +665,12 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   },
 
   addFurniture: (kind, position, dimensions, rotation = 0) => {
-    const defaults = defaultFurnitureDimensions(kind, get().unit);
+    const unit = get().unit;
+    const bedSize = kind === 'bed' ? DEFAULT_BED_SIZE : undefined;
+    const defaults =
+      kind === 'bed'
+        ? bedDimensionsForSize(DEFAULT_BED_SIZE, unit)
+        : defaultFurnitureDimensions(kind, unit);
     const item: Furniture = {
       id: uuidv4(),
       category: 'furniture',
@@ -674,6 +680,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       depth: dimensions?.depth ?? defaults.depth,
       height: dimensions?.height ?? defaults.height,
       rotation,
+      bedSize,
     };
     get().recordHistory();
     set({

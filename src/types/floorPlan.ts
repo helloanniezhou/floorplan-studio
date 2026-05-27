@@ -72,7 +72,11 @@ export type FurnitureKind =
   | 'table'
   | 'chair'
   | 'gasRange'
-  | 'fridge';
+  | 'fridge'
+  | 'bed'
+  | 'nightstand';
+
+export type BedSize = 'twin' | 'full' | 'queen' | 'king' | 'californiaKing';
 
 export type LandscapeKind =
   | 'tree'
@@ -101,6 +105,8 @@ export type PlacedItemBase = {
 export type Furniture = PlacedItemBase & {
   category: 'furniture';
   kind: FurnitureKind;
+  /** Mattress size preset when kind is bed */
+  bedSize?: BedSize;
 };
 
 export type LandscapeElement = PlacedItemBase & {

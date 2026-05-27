@@ -6,6 +6,13 @@ import {
   FURNITURE_LABELS,
   LANDSCAPE_LABELS,
 } from '../lib/placeables/defaults';
+import {
+  BED_SIZE_OPTIONS,
+  bedDimensionsForSize,
+  bedSizeLabel,
+  DEFAULT_BED_SIZE,
+} from '../lib/placeables/beds';
+import type { BedSize } from '../types/floorPlan';
 
 export function PropertyPanel() {
   const [minimized, setMinimized] = useState(false);
@@ -218,6 +225,32 @@ export function PropertyPanel() {
               ? FURNITURE_LABELS[selectedFurniture.kind]
               : LANDSCAPE_LABELS[selectedLandscape!.kind]}
           </h3>
+          {selectedFurniture?.kind === 'bed' && (
+            <label className="field">
+              <span>Bed size</span>
+              <select
+                className="field-select"
+                value={selectedFurniture.bedSize ?? DEFAULT_BED_SIZE}
+                onChange={(e) => {
+                  const bedSize = e.target.value as BedSize;
+                  const dims = bedDimensionsForSize(bedSize, unit);
+                  updateFurniture(selectedFurniture.id, {
+                    bedSize,
+                    width: dims.width,
+                    depth: dims.depth,
+                    height: dims.height,
+                  });
+                }}
+              >
+                {BED_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {bedSizeLabel(size)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {selectedFurniture?.kind !== 'bed' && (
           <label className="field">
             <span>Width ({unit})</span>
             <input
@@ -235,6 +268,8 @@ export function PropertyPanel() {
               }}
             />
           </label>
+          )}
+          {selectedFurniture?.kind !== 'bed' && (
           <label className="field">
             <span>Depth ({unit})</span>
             <input
@@ -252,6 +287,39 @@ export function PropertyPanel() {
               }}
             />
           </label>
+          )}
+          {selectedFurniture?.kind === 'bed' && (
+            <>
+              <label className="field">
+                <span>Width ({unit})</span>
+                <input
+                  type="number"
+                  min={0.1}
+                  step={0.05}
+                  value={Number(selectedPlaceable.width.toFixed(2))}
+                  onChange={(e) =>
+                    updateFurniture(selectedFurniture.id, {
+                      width: Number(e.target.value) || 0.1,
+                    })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Length ({unit})</span>
+                <input
+                  type="number"
+                  min={0.1}
+                  step={0.05}
+                  value={Number(selectedPlaceable.depth.toFixed(2))}
+                  onChange={(e) =>
+                    updateFurniture(selectedFurniture.id, {
+                      depth: Number(e.target.value) || 0.1,
+                    })
+                  }
+                />
+              </label>
+            </>
+          )}
           <label className="field">
             <span>Height ({unit})</span>
             <input
