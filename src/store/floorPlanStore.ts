@@ -46,6 +46,7 @@ type FloorPlanState = FloorPlan & {
   selection: Selection;
   activePlaceable: ActivePlaceable;
   gridEnabled: boolean;
+  showBackgroundImage: boolean;
   scaleDraft: ScaleDraft;
   wallDraftStart: Point | null;
   pendingLength: string;
@@ -56,6 +57,7 @@ type FloorPlanState = FloorPlan & {
   startPlace: (placeable: ActivePlaceable) => void;
   setSelection: (selection: Selection) => void;
   setGridEnabled: (enabled: boolean) => void;
+  setShowBackgroundImage: (show: boolean) => void;
   setPendingLength: (value: string) => void;
   setTraceLoading: (loading: boolean) => void;
   setTraceParams: (params: Partial<TraceParams>) => void;
@@ -138,6 +140,7 @@ export const useFloorPlanStore = create<FloorPlanState>()(
       selection: null,
       activePlaceable: DEFAULT_ACTIVE_PLACEABLE,
       gridEnabled: true,
+      showBackgroundImage: false,
       scaleDraft: { pointA: null, pointB: null },
       wallDraftStart: null,
       pendingLength: '',
@@ -164,6 +167,7 @@ export const useFloorPlanStore = create<FloorPlanState>()(
 
       setSelection: (selection) => set({ selection }),
       setGridEnabled: (gridEnabled) => set({ gridEnabled }),
+      setShowBackgroundImage: (showBackgroundImage) => set({ showBackgroundImage }),
       setPendingLength: (pendingLength) => set({ pendingLength }),
       setTraceLoading: (traceLoading) => set({ traceLoading }),
       setTraceParams: (params) =>
@@ -173,6 +177,7 @@ export const useFloorPlanStore = create<FloorPlanState>()(
         set({
           backgroundImage: dataUrl,
           imageSize: { width, height },
+          showBackgroundImage: false,
           scale: null,
           walls: [],
           openings: [],
@@ -480,6 +485,7 @@ export const useFloorPlanStore = create<FloorPlanState>()(
           tool: 'wall',
           selection: null,
           activePlaceable: DEFAULT_ACTIVE_PLACEABLE,
+          showBackgroundImage: false,
           scaleDraft: { pointA: null, pointB: null },
           wallDraftStart: null,
           pendingLength: '',

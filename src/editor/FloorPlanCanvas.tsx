@@ -6,10 +6,6 @@ import type { Point } from '../types/floorPlan';
 import { findNearestWall, findSnapPoint } from '../lib/geometry/snap';
 import { PlaceableShapes, getPlaceableAtPoint } from './PlaceableShapes';
 import {
-  FURNITURE_LABELS,
-  LANDSCAPE_LABELS,
-} from '../lib/placeables/defaults';
-import {
   distance,
   formatLength,
   pointOnWall,
@@ -54,7 +50,6 @@ export function FloorPlanCanvas() {
   const openings = useFloorPlanStore((s) => s.openings);
   const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
   const landscape = useFloorPlanStore((s) => s.landscape) ?? [];
-  const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
   const suggestions = useFloorPlanStore((s) => s.suggestions);
   const tool = useFloorPlanStore((s) => s.tool);
   const selection = useFloorPlanStore((s) => s.selection);
@@ -62,6 +57,7 @@ export function FloorPlanCanvas() {
   const unit = useFloorPlanStore((s) => s.unit);
   const gridEnabled = useFloorPlanStore((s) => s.gridEnabled);
   const backgroundImage = useFloorPlanStore((s) => s.backgroundImage);
+  const showBackgroundImage = useFloorPlanStore((s) => s.showBackgroundImage);
   const imageSize = useFloorPlanStore((s) => s.imageSize);
   const scaleDraft = useFloorPlanStore((s) => s.scaleDraft);
   const pendingLength = useFloorPlanStore((s) => s.pendingLength);
@@ -406,7 +402,7 @@ export function FloorPlanCanvas() {
         )}
 
         <Layer listening={false}>
-          {bgImage && (
+          {bgImage && showBackgroundImage && (
             <KonvaImage
               image={bgImage}
               opacity={0.55}
@@ -572,16 +568,6 @@ export function FloorPlanCanvas() {
           )}
         </Layer>
       </Stage>
-
-      {tool === 'place' && (
-        <div className="length-input-bar place-hint">
-          Click to place{' '}
-          {activePlaceable.category === 'furniture'
-            ? FURNITURE_LABELS[activePlaceable.kind]
-            : LANDSCAPE_LABELS[activePlaceable.kind]}
-          . Select it afterward to edit dimensions.
-        </div>
-      )}
 
       {tool === 'wall' && wallDraftStart && (
         <div className="length-input-bar">

@@ -12,9 +12,7 @@ export function PropertyPanel() {
   const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
   const landscape = useFloorPlanStore((s) => s.landscape) ?? [];
   const unit = useFloorPlanStore((s) => s.unit);
-  const wallHeight = useFloorPlanStore((s) => s.wallHeight);
-  const scale = useFloorPlanStore((s) => s.scale);
-  const gridEnabled = useFloorPlanStore((s) => s.gridEnabled);
+
   const updateWall = useFloorPlanStore((s) => s.updateWall);
   const updateWallLength = useFloorPlanStore((s) => s.updateWallLength);
   const deleteWall = useFloorPlanStore((s) => s.deleteWall);
@@ -24,8 +22,6 @@ export function PropertyPanel() {
   const deleteFurniture = useFloorPlanStore((s) => s.deleteFurniture);
   const updateLandscape = useFloorPlanStore((s) => s.updateLandscape);
   const deleteLandscape = useFloorPlanStore((s) => s.deleteLandscape);
-  const setGridEnabled = useFloorPlanStore((s) => s.setGridEnabled);
-  const straightenWalls = useFloorPlanStore((s) => s.straightenWalls);
 
   const selectedWall =
     selection?.type === 'wall' ? walls.find((w) => w.id === selection.id) : null;
@@ -44,35 +40,18 @@ export function PropertyPanel() {
 
   const selectedPlaceable = selectedFurniture ?? selectedLandscape;
 
+  if (!selectedWall && !selectedOpening && !selectedPlaceable) {
+    return (
+      <aside className="property-panel property-panel--empty">
+        <h2>Properties</h2>
+        <p className="hint">Select a wall, opening, or placed item to edit dimensions.</p>
+      </aside>
+    );
+  }
+
   return (
     <aside className="property-panel">
       <h2>Properties</h2>
-
-      <label className="field">
-        <span>Grid snap</span>
-        <input
-          type="checkbox"
-          checked={gridEnabled}
-          onChange={(e) => setGridEnabled(e.target.checked)}
-        />
-      </label>
-
-      <label className="field">
-        <span>Wall height ({unit})</span>
-        <input
-          type="number"
-          min={1}
-          step={0.1}
-          value={wallHeight}
-          onChange={(e) =>
-            useFloorPlanStore.setState({ wallHeight: Number(e.target.value) || 2.4 })
-          }
-        />
-      </label>
-
-      {!scale && (
-        <p className="hint">Set scale to enable real-world dimensions.</p>
-      )}
 
       {selectedWall && (
         <div className="panel-block">
@@ -300,19 +279,6 @@ export function PropertyPanel() {
           </button>
         </div>
       )}
-
-      {!selectedWall && !selectedOpening && !selectedPlaceable && (
-        <p className="hint">
-          Select a wall, opening, or placed item to edit properties. Use furniture or
-          landscape tools to place items, then adjust width, depth, and height here.
-        </p>
-      )}
-
-      <div className="panel-block">
-        <button type="button" className="toolbar-btn" onClick={straightenWalls}>
-          Straighten walls (90°)
-        </button>
-      </div>
     </aside>
   );
 }

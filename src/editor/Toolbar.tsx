@@ -39,8 +39,12 @@ const LANDSCAPE_ITEMS: { kind: LandscapeKind; icon: string }[] = [
 export function Toolbar() {
   const tool = useFloorPlanStore((s) => s.tool);
   const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
+  const backgroundImage = useFloorPlanStore((s) => s.backgroundImage);
+  const showBackgroundImage = useFloorPlanStore((s) => s.showBackgroundImage);
   const setTool = useFloorPlanStore((s) => s.setTool);
   const startPlace = useFloorPlanStore((s) => s.startPlace);
+  const setShowBackgroundImage = useFloorPlanStore((s) => s.setShowBackgroundImage);
+  const resetPlan = useFloorPlanStore((s) => s.resetPlan);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,6 +92,25 @@ export function Toolbar() {
           hidden
           onChange={handleUpload}
         />
+        {backgroundImage && (
+          <label className="field row toolbar-toggle">
+            <input
+              type="checkbox"
+              checked={showBackgroundImage}
+              onChange={(e) => setShowBackgroundImage(e.target.checked)}
+            />
+            <span>Show uploaded image</span>
+          </label>
+        )}
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => {
+            if (confirm('Clear entire plan?')) resetPlan();
+          }}
+        >
+          New plan
+        </button>
       </div>
 
       <div className="toolbar-section">
