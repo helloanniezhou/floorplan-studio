@@ -27,7 +27,7 @@ import {
   DEFAULT_TRACE_PARAMS,
 } from '../types/floorPlan';
 import {
-  FURNITURE_DEFAULTS,
+  defaultFurnitureDimensions,
   LANDSCAPE_DEFAULTS,
 } from '../lib/placeables/defaults';
 import { convertWallsToWorld, clampOpeningOnWall } from '../lib/geometry/units';
@@ -184,7 +184,7 @@ const initialPlan: FloorPlan = {
   openings: [],
   furniture: [],
   landscape: [],
-  unit: 'm',
+  unit: 'ft',
   wallHeight: defaultWallHeight('m'),
   scale: null,
   suggestions: [],
@@ -664,7 +664,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   },
 
   addFurniture: (kind, position, dimensions, rotation = 0) => {
-    const defaults = FURNITURE_DEFAULTS[kind];
+    const defaults = defaultFurnitureDimensions(kind, get().unit);
     const item: Furniture = {
       id: uuidv4(),
       category: 'furniture',

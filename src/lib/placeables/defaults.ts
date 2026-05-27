@@ -3,17 +3,57 @@ import type {
   LandscapeKind,
   PlaceableDimensions,
 } from '../../types/floorPlan';
+import { feetToMeters } from '../geometry/vectors';
 
-export const FURNITURE_DEFAULTS: Record<FurnitureKind, PlaceableDimensions> = {
-  kitchenCounter: { width: 2.4, depth: 0.65, height: 0.9 },
-  sink: { width: 0.6, depth: 0.5, height: 0.2 },
-  toilet: { width: 0.4, depth: 0.7, height: 0.8 },
-  sectionalSofa: { width: 2.8, depth: 1.6, height: 0.85 },
-  table: { width: 1.6, depth: 0.9, height: 0.75 },
-  chair: { width: 0.5, depth: 0.5, height: 0.9 },
-  gasRange: { width: 0.76, depth: 0.7, height: 0.9 },
-  fridge: { width: 0.9, depth: 0.75, height: 1.8 },
+/** Typical California / US residential furniture sizes (feet). Plan: width × depth; height is vertical. */
+const FURNITURE_DEFAULTS_FT: Record<FurnitureKind, PlaceableDimensions> = {
+  /** 10' base run, 24" deep, 36" high */
+  kitchenCounter: { width: 10, depth: 2, height: 3 },
+  /** 33" sink base, standard 24" counter depth */
+  sink: { width: 2.75, depth: 1.75, height: 3 },
+  /** ~30" × 30" clear floor space, standard height */
+  toilet: { width: 2, depth: 2.5, height: 2.5 },
+  /** Large L-shaped sectional */
+  sectionalSofa: { width: 10, depth: 8, height: 3 },
+  /** 6-person dining table (72" × 36") */
+  table: { width: 6, depth: 3, height: 2.5 },
+  /** Side / dining chair (~21" seat footprint) */
+  chair: { width: 1.75, depth: 1.75, height: 3 },
+  /** 30" wide freestanding range */
+  gasRange: { width: 2.5, depth: 2.25, height: 3 },
+  /** 36" wide × 70" tall standard refrigerator */
+  fridge: { width: 3, depth: 2.5, height: 6 },
 };
+
+function scaleDimensions(
+  dims: PlaceableDimensions,
+  factor: number,
+): PlaceableDimensions {
+  return {
+    width: dims.width * factor,
+    depth: dims.depth * factor,
+    height: dims.height * factor,
+  };
+}
+
+/** Default furniture size in the plan's current unit (ft or m). */
+export function defaultFurnitureDimensions(
+  kind: FurnitureKind,
+  unit: 'm' | 'ft',
+): PlaceableDimensions {
+  const ft = FURNITURE_DEFAULTS_FT[kind];
+  if (unit === 'ft') return { ...ft };
+  return scaleDimensions(ft, feetToMeters(1));
+}
+
+/** @deprecated Use defaultFurnitureDimensions(kind, unit) */
+export const FURNITURE_DEFAULTS: Record<FurnitureKind, PlaceableDimensions> =
+  Object.fromEntries(
+    (Object.keys(FURNITURE_DEFAULTS_FT) as FurnitureKind[]).map((kind) => [
+      kind,
+      defaultFurnitureDimensions(kind, 'ft'),
+    ]),
+  ) as Record<FurnitureKind, PlaceableDimensions>;
 
 export const LANDSCAPE_DEFAULTS: Record<LandscapeKind, PlaceableDimensions> = {
   tree: { width: 3, depth: 3, height: 4 },
