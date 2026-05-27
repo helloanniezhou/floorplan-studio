@@ -9,8 +9,8 @@ export function PropertyPanel() {
   const selection = useFloorPlanStore((s) => s.selection);
   const walls = useFloorPlanStore((s) => s.walls);
   const openings = useFloorPlanStore((s) => s.openings);
-  const furniture = useFloorPlanStore((s) => s.furniture);
-  const landscape = useFloorPlanStore((s) => s.landscape);
+  const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
+  const landscape = useFloorPlanStore((s) => s.landscape) ?? [];
   const unit = useFloorPlanStore((s) => s.unit);
   const wallHeight = useFloorPlanStore((s) => s.wallHeight);
   const scale = useFloorPlanStore((s) => s.scale);

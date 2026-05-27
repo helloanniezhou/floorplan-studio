@@ -475,8 +475,11 @@ export const useFloorPlanStore = create<FloorPlanState>()(
       resetPlan: () =>
         set({
           ...initialPlan,
+          furniture: [],
+          landscape: [],
           tool: 'wall',
           selection: null,
+          activePlaceable: DEFAULT_ACTIVE_PLACEABLE,
           scaleDraft: { pointA: null, pointB: null },
           wallDraftStart: null,
           pendingLength: '',
@@ -484,6 +487,16 @@ export const useFloorPlanStore = create<FloorPlanState>()(
     }),
     {
       name: 'floorplan-studio',
+      version: 1,
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<FloorPlan>;
+        return {
+          ...current,
+          ...saved,
+          furniture: saved.furniture ?? [],
+          landscape: saved.landscape ?? [],
+        };
+      },
       partialize: (state) => ({
         walls: state.walls,
         openings: state.openings,

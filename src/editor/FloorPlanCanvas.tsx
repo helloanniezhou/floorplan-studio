@@ -52,8 +52,8 @@ export function FloorPlanCanvas() {
 
   const walls = useFloorPlanStore((s) => s.walls);
   const openings = useFloorPlanStore((s) => s.openings);
-  const furniture = useFloorPlanStore((s) => s.furniture);
-  const landscape = useFloorPlanStore((s) => s.landscape);
+  const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
+  const landscape = useFloorPlanStore((s) => s.landscape) ?? [];
   const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
   const suggestions = useFloorPlanStore((s) => s.suggestions);
   const tool = useFloorPlanStore((s) => s.tool);
