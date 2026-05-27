@@ -9,6 +9,8 @@ Browser-based interior floor plan editor. Upload a plan photo, auto-detect walls
 - **Scale calibration** from a known wall length
 - **Wall tool** with endpoint/midpoint/grid snap, orthogonal constraint (Shift), and typed lengths (Enter)
 - **Doors and windows** placed on walls with editable dimensions
+- **Indoor furniture** (counter, sink, toilet, sofa, table, chairs, range, fridge) with editable dimensions
+- **Outdoor landscape** (trees, shrubs, beds, patio, path, lawn, pool) with editable dimensions
 - **Live 3D preview** with mitered wall corners and opening cuts
 - **Local persistence** (localStorage) plus JSON export/import
 
@@ -28,7 +30,9 @@ Open http://localhost:5173
 3. **Auto-detect** (optional) — tune OpenCV sliders and click *Run auto-detect*; click orange dashed lines to accept, right-click to dismiss
 4. **Draw walls** — use the Wall tool; hold Shift for 45°/90° constraints; type a length and press Enter to fix the endpoint
 5. **Add openings** — Door/Window tools: click on a wall
-6. **3D preview** — updates automatically in the right panel
+6. **Place furniture & landscape** — pick an item in the left sidebar under *Indoor furniture* or *Outdoor landscape*, then click the canvas
+7. **Edit dimensions** — select a placed item and use the Properties panel (width, depth, height)
+8. **3D preview** — updates automatically in the right panel
 
 ## Stack
 

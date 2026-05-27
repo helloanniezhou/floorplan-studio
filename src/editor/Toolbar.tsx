@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
 import type { FurnitureKind, LandscapeKind } from '../types/floorPlan';
 import {
@@ -6,9 +6,7 @@ import {
   LANDSCAPE_LABELS,
 } from '../lib/placeables/defaults';
 
-type ToolbarTab = 'plan' | 'furniture' | 'landscape';
-
-const PLAN_TOOLS = [
+const DRAWING_TOOLS = [
   { id: 'select' as const, label: 'Select', icon: '↖' },
   { id: 'wall' as const, label: 'Wall', icon: '▭' },
   { id: 'door' as const, label: 'Door', icon: '🚪' },
@@ -38,19 +36,12 @@ const LANDSCAPE_ITEMS: { kind: LandscapeKind; icon: string }[] = [
   { kind: 'pool', icon: '◧' },
 ];
 
-const TABS: { id: ToolbarTab; label: string }[] = [
-  { id: 'plan', label: 'Plan' },
-  { id: 'furniture', label: 'Furniture' },
-  { id: 'landscape', label: 'Landscape' },
-];
-
 export function Toolbar() {
   const tool = useFloorPlanStore((s) => s.tool);
   const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
   const setTool = useFloorPlanStore((s) => s.setTool);
   const startPlace = useFloorPlanStore((s) => s.startPlace);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<ToolbarTab>('plan');
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -62,7 +53,6 @@ export function Toolbar() {
       img.onload = () => {
         useFloorPlanStore.getState().setBackgroundImage(dataUrl, img.width, img.height);
         useFloorPlanStore.getState().setTool('scale');
-        setTab('plan');
       };
       img.src = dataUrl;
     };
@@ -83,92 +73,67 @@ export function Toolbar() {
     <aside className="toolbar">
       <h1 className="toolbar-title">Floor Plan Studio</h1>
 
-      <div className="toolbar-tabs" role="tablist" aria-label="Tool categories">
-        {TABS.map((t) => (
+      <div className="toolbar-section">
+        <button
+          type="button"
+          className="toolbar-btn primary"
+          onClick={() => fileRef.current?.click()}
+        >
+          Upload plan
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={handleUpload}
+        />
+      </div>
+
+      <div className="toolbar-section">
+        <p className="toolbar-label">Tools</p>
+        {DRAWING_TOOLS.map((t) => (
           <button
             key={t.id}
             type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            className={`toolbar-tab ${tab === t.id ? 'active' : ''}`}
-            onClick={() => setTab(t.id)}
+            className={`toolbar-btn ${tool === t.id ? 'active' : ''}`}
+            onClick={() => setTool(t.id)}
           >
+            <span className="tool-icon">{t.icon}</span>
             {t.label}
           </button>
         ))}
       </div>
 
-      {tab === 'plan' && (
-        <>
-          <div className="toolbar-section">
-            <button
-              type="button"
-              className="toolbar-btn primary"
-              onClick={() => fileRef.current?.click()}
-            >
-              Upload plan
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={handleUpload}
-            />
-          </div>
+      <div className="toolbar-section toolbar-section--highlight">
+        <p className="toolbar-label">Indoor furniture</p>
+        {FURNITURE_ITEMS.map((item) => (
+          <button
+            key={item.kind}
+            type="button"
+            className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
+            onClick={() => startPlace({ category: 'furniture', kind: item.kind })}
+          >
+            <span className="tool-icon">{item.icon}</span>
+            {FURNITURE_LABELS[item.kind]}
+          </button>
+        ))}
+      </div>
 
-          <div className="toolbar-section">
-            <p className="toolbar-label">Drawing tools</p>
-            {PLAN_TOOLS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className={`toolbar-btn ${tool === t.id ? 'active' : ''}`}
-                onClick={() => setTool(t.id)}
-              >
-                <span className="tool-icon">{t.icon}</span>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      {tab === 'furniture' && (
-        <div className="toolbar-section">
-          <p className="toolbar-label">Indoor furniture</p>
-          <p className="toolbar-hint">Click an item, then click the canvas to place it.</p>
-          {FURNITURE_ITEMS.map((item) => (
-            <button
-              key={item.kind}
-              type="button"
-              className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
-              onClick={() => startPlace({ category: 'furniture', kind: item.kind })}
-            >
-              <span className="tool-icon">{item.icon}</span>
-              {FURNITURE_LABELS[item.kind]}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {tab === 'landscape' && (
-        <div className="toolbar-section">
-          <p className="toolbar-label">Outdoor landscape</p>
-          <p className="toolbar-hint">Click an item, then click the canvas to place it.</p>
-          {LANDSCAPE_ITEMS.map((item) => (
-            <button
-              key={item.kind}
-              type="button"
-              className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
-              onClick={() => startPlace({ category: 'landscape', kind: item.kind })}
-            >
-              <span className="tool-icon">{item.icon}</span>
-              {LANDSCAPE_LABELS[item.kind]}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="toolbar-section toolbar-section--highlight">
+        <p className="toolbar-label">Outdoor landscape</p>
+        {LANDSCAPE_ITEMS.map((item) => (
+          <button
+            key={item.kind}
+            type="button"
+            className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
+            onClick={() => startPlace({ category: 'landscape', kind: item.kind })}
+          >
+            <span className="tool-icon">{item.icon}</span>
+            {LANDSCAPE_LABELS[item.kind]}
+          </button>
+        ))}
+      </div>
     </aside>
   );
 }
