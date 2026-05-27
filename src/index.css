@@ -1,0 +1,9 @@
+@import './App.css';
+
+:root {
+  font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+}
