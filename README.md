@@ -46,12 +46,21 @@ Static SPA (Vite → `dist/`). Production build:
 npm run build
 ```
 
-### Vercel (recommended)
+### Vercel
 
-1. Open [Import `helloanniezhou/floorplan-studio` on Vercel](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhelloanniezhou%2Ffloorplan-studio).
-2. Sign in with GitHub if prompted and confirm the repo.
-3. Leave the defaults (Vite, build `npm run build`, output `dist`) — `vercel.json` already configures SPA routing.
-4. Click **Deploy**. Future pushes to `main` redeploy automatically.
+**Project:** [floorplan-studio](https://vercel.com/annies-projects-cc2c2b72/floorplan-studio) (`annies-projects-cc2c2b72`)
+
+**Repository:** [helloanniezhou/floorplan-studio](https://github.com/helloanniezhou/floorplan-studio) — `main` has the latest app code.
+
+If the project shows **Connect Git** (no production deployment yet):
+
+1. Open [Git settings](https://vercel.com/annies-projects-cc2c2b72/floorplan-studio/settings/git) for the project.
+2. Connect **GitHub** and select `helloanniezhou/floorplan-studio`.
+3. Set **Production Branch** to `main`.
+4. Confirm build settings: framework **Vite**, command `npm run build`, output `dist` (`vercel.json` handles SPA routing).
+5. Save — Vercel runs the first production deploy from `main`.
+
+After Git is connected, every push to `main` triggers a new production deployment automatically.
 
 ## Limitations (v1)
 
