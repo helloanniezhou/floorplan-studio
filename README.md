@@ -40,11 +40,18 @@ Open http://localhost:5173
 
 ## Deploy
 
-Static SPA — deploy to Vercel, Netlify, or any static host:
+Static SPA (Vite → `dist/`). Production build:
 
 ```bash
 npm run build
 ```
+
+### Vercel (recommended)
+
+1. Open [Import `helloanniezhou/floorplan-studio` on Vercel](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhelloanniezhou%2Ffloorplan-studio).
+2. Sign in with GitHub if prompted and confirm the repo.
+3. Leave the defaults (Vite, build `npm run build`, output `dist`) — `vercel.json` already configures SPA routing.
+4. Click **Deploy**. Future pushes to `main` redeploy automatically.
 
 ## Limitations (v1)
 
