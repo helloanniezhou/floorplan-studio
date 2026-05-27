@@ -1,20 +1,47 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Line, Circle, Image as KonvaImage, Text, Arc, Group } from 'react-konva';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Stage, Layer, Line, Circle, Image as KonvaImage, Text, Arc, Group, Rect } from 'react-konva';
 import type Konva from 'konva';
 import { useFloorPlanStore } from '../store/floorPlanStore';
 import type { Point } from '../types/floorPlan';
-import { findNearestWall, findSnapPoint } from '../lib/geometry/snap';
-import { PlaceableShapes, getPlaceableAtPoint } from './PlaceableShapes';
+import { findNearestWall, findSnapPoint, type SnapResult } from '../lib/geometry/snap';
+import { footprintToDisplayPoints, wallFootprintPolygon } from '../lib/geometry/wallFootprint';
+import { gridStepForUnit } from '../lib/units/defaults';
 import {
-  distance,
+  constrainSquareCorner,
+  rectangleDimensions,
+  rectangleFromCorners,
+  rectangleWallSegments,
+} from '../lib/geometry/rectangle';
+import {
+  add,
   formatLength,
   pointOnWall,
   snapAngle,
+  subtract,
   wallDirection,
   wallLength,
 } from '../lib/geometry/vectors';
+import type { Furniture, LandscapeElement, LineSuggestion } from '../types/floorPlan';
 
-const SNAP_RADIUS = 12;
+import { PlaceableShapes, getPlaceableAtPoint } from './PlaceableShapes';
+import {
+  FURNITURE_LABELS,
+  LANDSCAPE_LABELS,
+} from '../lib/placeables/defaults';
+import {
+  applyDeltaToWalls,
+  displayRectToWorldRect,
+  getSelectedWallIds,
+  isWallSelected,
+  normalizeDisplayRect,
+  wallEndpointHit,
+  wallsInWorldRect,
+} from '../lib/geometry/selection';
+import { boundsFromWalls } from '../lib/walls3d/miter';
+import { PlanCompassRose } from './PlanCompassRose';
+import { PlanLotBoundary } from './PlanLotBoundary';
+
+const SNAP_RADIUS = 18;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 8;
 
@@ -50,6 +77,7 @@ export function FloorPlanCanvas() {
   const openings = useFloorPlanStore((s) => s.openings);
   const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
   const landscape = useFloorPlanStore((s) => s.landscape) ?? [];
+  const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
   const suggestions = useFloorPlanStore((s) => s.suggestions);
   const tool = useFloorPlanStore((s) => s.tool);
   const selection = useFloorPlanStore((s) => s.selection);
@@ -57,19 +85,28 @@ export function FloorPlanCanvas() {
   const unit = useFloorPlanStore((s) => s.unit);
   const gridEnabled = useFloorPlanStore((s) => s.gridEnabled);
   const backgroundImage = useFloorPlanStore((s) => s.backgroundImage);
-  const showBackgroundImage = useFloorPlanStore((s) => s.showBackgroundImage);
+  const backgroundVisible = useFloorPlanStore((s) => s.backgroundVisible);
+  const backgroundOffset = useFloorPlanStore((s) => s.backgroundOffset);
   const imageSize = useFloorPlanStore((s) => s.imageSize);
+
   const scaleDraft = useFloorPlanStore((s) => s.scaleDraft);
   const pendingLength = useFloorPlanStore((s) => s.pendingLength);
+  const northAngleDeg = useFloorPlanStore((s) => s.northAngleDeg);
+  const lotSize = useFloorPlanStore((s) => s.lotSize);
 
   const addWall = useFloorPlanStore((s) => s.addWall);
+  const addRectangleWalls = useFloorPlanStore((s) => s.addRectangleWalls);
   const setSelection = useFloorPlanStore((s) => s.setSelection);
+  const setWallSelection = useFloorPlanStore((s) => s.setWallSelection);
+  const toggleWallSelection = useFloorPlanStore((s) => s.toggleWallSelection);
+  const setWallsSilent = useFloorPlanStore((s) => s.setWallsSilent);
   const setScaleDraftPoint = useFloorPlanStore((s) => s.setScaleDraftPoint);
   const addOpening = useFloorPlanStore((s) => s.addOpening);
   const placeActiveItem = useFloorPlanStore((s) => s.placeActiveItem);
   const updateFurniture = useFloorPlanStore((s) => s.updateFurniture);
   const updateLandscape = useFloorPlanStore((s) => s.updateLandscape);
   const updateWall = useFloorPlanStore((s) => s.updateWall);
+  const recordHistory = useFloorPlanStore((s) => s.recordHistory);
   const acceptSuggestion = useFloorPlanStore((s) => s.acceptSuggestion);
   const dismissSuggestion = useFloorPlanStore((s) => s.dismissSuggestion);
   const setPendingLength = useFloorPlanStore((s) => s.setPendingLength);
@@ -77,19 +114,39 @@ export function FloorPlanCanvas() {
   const bgImage = useBackgroundImage(backgroundImage);
   const ppu = scale?.pixelsPerUnit ?? null;
 
+  const compassAnchor = useMemo(() => {
+    const b = boundsFromWalls(walls);
+    const pad = 1.5;
+    const cx = (b.minX + b.maxX) / 2;
+    const topY = b.minZ - pad;
+    return toDisplay({ x: cx, y: topY }, ppu);
+  }, [walls, ppu]);
+
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [stageScale, setStageScale] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [wallDraftStart, setWallDraftStart] = useState<Point | null>(null);
+  const [rectDraftStart, setRectDraftStart] = useState<Point | null>(null);
   const [cursorWorld, setCursorWorld] = useState<Point | null>(null);
+  const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null);
   const [shiftKey, setShiftKey] = useState(false);
   const [spaceDown, setSpaceDown] = useState(false);
   const [dragging, setDragging] = useState<
     | null
     | { kind: 'pan'; last: Point }
     | { kind: 'endpoint'; wallId: string; end: 'start' | 'end' }
+    | { kind: 'translate'; wallIds: string[]; startWorld: Point }
+    | { kind: 'marquee'; startDisplay: Point; currentDisplay: Point }
     | { kind: 'placeable'; type: 'furniture' | 'landscape'; id: string }
   >(null);
+
+  const translateSnapshot = useRef<Map<string, { start: Point; end: Point }>>(new Map());
+  const translateExtras = useRef<{
+    backgroundOffset: Point;
+    suggestions: LineSuggestion[];
+    furniture: Furniture[];
+    landscape: LandscapeElement[];
+  } | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -126,7 +183,12 @@ export function FloorPlanCanvas() {
       }
       if (e.key === 'Escape') {
         setWallDraftStart(null);
+        setRectDraftStart(null);
         setPendingLength('');
+        setSelection(null);
+        setDragging(null);
+        translateSnapshot.current.clear();
+        translateExtras.current = null;
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -139,7 +201,12 @@ export function FloorPlanCanvas() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [wallDraftStart, pendingLength, cursorWorld, addWall, setPendingLength]);
+  }, [wallDraftStart, pendingLength, cursorWorld, addWall, setPendingLength, setSelection]);
+
+  useEffect(() => {
+    setRectDraftStart(null);
+    setWallDraftStart(null);
+  }, [tool]);
 
   const screenToWorld = useCallback(
     (screenX: number, screenY: number): Point => {
@@ -150,8 +217,8 @@ export function FloorPlanCanvas() {
     [stagePos, stageScale, ppu],
   );
 
-  const getSnappedWorld = useCallback(
-    (world: Point, from?: Point): Point => {
+  const resolveSnap = useCallback(
+    (world: Point, from?: Point): { point: Point; snap: SnapResult } => {
       const display = toDisplay(world, ppu);
       const displayWalls = walls.map((w) => ({
         ...w,
@@ -161,15 +228,29 @@ export function FloorPlanCanvas() {
       const snap = findSnapPoint(display, displayWalls, {
         snapRadius: SNAP_RADIUS / stageScale,
         gridEnabled,
-        gridSize: ppu ? ppu * 0.1 : 10,
+        gridSize: gridStepForUnit(unit, ppu),
       });
-      let result = fromDisplay(snap.point, ppu);
-      if (from && (tool === 'wall' || shiftKey)) {
-        result = snapAngle(from, result, shiftKey);
+      let point = fromDisplay(snap.point, ppu);
+      if (from && shiftKey && tool === 'wall') {
+        point = snapAngle(from, point, true);
       }
-      return result;
+      return { point, snap };
     },
-    [walls, ppu, gridEnabled, stageScale, tool, shiftKey],
+    [walls, ppu, gridEnabled, stageScale, tool, shiftKey, unit],
+  );
+
+  const getSnappedWorld = useCallback(
+    (world: Point, from?: Point): Point => resolveSnap(world, from).point,
+    [resolveSnap],
+  );
+
+  const getRectCorner = useCallback(
+    (start: Point, world: Point): Point => {
+      let end = getSnappedWorld(world);
+      if (shiftKey) end = constrainSquareCorner(start, end);
+      return end;
+    },
+    [getSnappedWorld, shiftKey],
   );
 
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -225,13 +306,22 @@ export function FloorPlanCanvas() {
     }
 
     if (tool === 'wall') {
+      const { point, snap } = resolveSnap(screenToWorld(pos.x, pos.y), wallDraftStart ?? undefined);
       if (!wallDraftStart) {
-        setWallDraftStart(world);
+        setWallDraftStart(point);
+        setActiveSnap(snap.kind !== 'none' ? snap : null);
       } else {
-        addWall(wallDraftStart, world);
-        setWallDraftStart(null);
+        const end = getSnappedWorld(screenToWorld(pos.x, pos.y), wallDraftStart);
+        addWall(wallDraftStart, end);
+        setWallDraftStart(end);
         setPendingLength('');
+        setActiveSnap(null);
       }
+      return;
+    }
+
+    if (tool === 'rect') {
+      setRectDraftStart(world);
       return;
     }
 
@@ -268,34 +358,83 @@ export function FloorPlanCanvas() {
         return;
       }
 
-      const endpointHit = walls.find((w) => {
-        const ds = distance(world, w.start);
-        const de = distance(world, w.end);
-        const threshold = (SNAP_RADIUS / stageScale) / (ppu ?? 1);
-        if (ds < threshold) {
-          setDragging({ kind: 'endpoint', wallId: w.id, end: 'start' });
-          setSelection({ type: 'wall', id: w.id });
-          return true;
+      const endpointThreshold = (SNAP_RADIUS / stageScale) / (ppu ?? 1);
+      const displayPt = {
+        x: (pos.x - stagePos.x) / stageScale,
+        y: (pos.y - stagePos.y) / stageScale,
+      };
+
+      for (const w of walls) {
+        const endHit = wallEndpointHit(world, w, endpointThreshold);
+        if (endHit) {
+          if (!e.evt.shiftKey) {
+            setWallSelection([w.id], { id: w.id, anchor: endHit });
+          }
+          recordHistory();
+          setDragging({ kind: 'endpoint', wallId: w.id, end: endHit });
+          return;
         }
-        if (de < threshold) {
-          setDragging({ kind: 'endpoint', wallId: w.id, end: 'end' });
-          setSelection({ type: 'wall', id: w.id });
-          return true;
-        }
-        return false;
-      });
-      if (endpointHit) return;
+      }
 
       const displayWalls = walls.map((w) => ({
         ...w,
         start: toDisplay(w.start, ppu),
         end: toDisplay(w.end, ppu),
       }));
-      const hit = findNearestWall(toDisplay(world, ppu), displayWalls, 8 / stageScale);
+      const hit = findNearestWall(toDisplay(world, ppu), displayWalls, 10 / stageScale);
+
       if (hit) {
-        setSelection({ type: 'wall', id: hit.wall.id });
-      } else {
-        setSelection(null);
+        const w = walls.find((x) => x.id === hit.wall.id);
+        if (!w) return;
+
+        if (e.evt.shiftKey) {
+          toggleWallSelection(w.id, true);
+          return;
+        }
+
+        const selectedIds = getSelectedWallIds(selection);
+        const moveIds = selectedIds.includes(w.id) ? selectedIds : [w.id];
+        if (!selectedIds.includes(w.id)) {
+          setWallSelection([w.id], { id: w.id, anchor: 'start' });
+        }
+
+        const snap = gridEnabled && ppu ? resolveSnap(world).point : world;
+        translateSnapshot.current = new Map(
+          walls
+            .filter((wall) => moveIds.includes(wall.id))
+            .map((wall) => [wall.id, { start: { ...wall.start }, end: { ...wall.end } }]),
+        );
+        const moveAll = moveIds.length === walls.length && walls.length > 0;
+        translateExtras.current = moveAll
+          ? {
+              backgroundOffset: { ...backgroundOffset },
+              suggestions: suggestions.map((s) => ({
+                ...s,
+                start: { ...s.start },
+                end: { ...s.end },
+              })),
+              furniture: furniture.map((f) => ({
+                ...f,
+                position: { ...f.position },
+              })),
+              landscape: landscape.map((l) => ({
+                ...l,
+                position: { ...l.position },
+              })),
+            }
+          : null;
+        recordHistory();
+        setDragging({ kind: 'translate', wallIds: moveIds, startWorld: snap });
+        return;
+      }
+
+      if (e.evt.button === 0) {
+        if (!e.evt.shiftKey) setSelection(null);
+        setDragging({
+          kind: 'marquee',
+          startDisplay: displayPt,
+          currentDisplay: displayPt,
+        });
       }
     }
   };
@@ -314,23 +453,63 @@ export function FloorPlanCanvas() {
       return;
     }
 
-    const world = getSnappedWorld(
-      screenToWorld(pos.x, pos.y),
+    const fromPoint =
       dragging?.kind === 'endpoint'
         ? undefined
-        : wallDraftStart ?? undefined,
-    );
+        : tool === 'wall' || tool === 'rect'
+          ? wallDraftStart ?? undefined
+          : undefined;
+    const { point: world, snap } = resolveSnap(screenToWorld(pos.x, pos.y), fromPoint);
     setCursorWorld(world);
+    const showSnap =
+      tool === 'wall' || tool === 'rect' || tool === 'select';
+    setActiveSnap(showSnap && snap.kind !== 'none' ? snap : null);
 
     if (dragging?.kind === 'endpoint') {
       const wall = walls.find((w) => w.id === dragging.wallId);
       if (wall) {
         if (dragging.end === 'start') {
-          updateWall(wall.id, { start: world });
+          updateWall(wall.id, { start: world }, { recordHistory: false });
         } else {
-          updateWall(wall.id, { end: world });
+          updateWall(wall.id, { end: world }, { recordHistory: false });
         }
       }
+      return;
+    }
+
+    if (dragging?.kind === 'translate') {
+      const snapWorld =
+        gridEnabled && (tool === 'select' || tool === 'wall')
+          ? resolveSnap(world).point
+          : world;
+      const delta = subtract(snapWorld, dragging.startWorld);
+      const moved = applyDeltaToWalls(
+        walls,
+        dragging.wallIds,
+        delta,
+        translateSnapshot.current,
+      );
+      setWallsSilent(moved);
+      if (translateExtras.current) {
+        const extras = translateExtras.current;
+        useFloorPlanStore.setState({
+          backgroundOffset: add(extras.backgroundOffset, delta),
+          suggestions: extras.suggestions.map((s) => ({
+            ...s,
+            start: add(s.start, delta),
+            end: add(s.end, delta),
+          })),
+          furniture: extras.furniture.map((f) => ({
+            ...f,
+            position: add(f.position, delta),
+          })),
+          landscape: extras.landscape.map((l) => ({
+            ...l,
+            position: add(l.position, delta),
+          })),
+        });
+      }
+      return;
     }
 
     if (dragging?.kind === 'placeable') {
@@ -339,18 +518,68 @@ export function FloorPlanCanvas() {
       } else {
         updateLandscape(dragging.id, { position: world });
       }
+      return;
+    }
+
+    if (dragging?.kind === 'marquee') {
+      setDragging({
+        ...dragging,
+        currentDisplay: {
+          x: (pos.x - stagePos.x) / stageScale,
+          y: (pos.y - stagePos.y) / stageScale,
+        },
+      });
     }
   };
 
-  const handleMouseUp = () => setDragging(null);
+  const handleMouseUp = () => {
+    if (tool === 'rect' && rectDraftStart && cursorWorld) {
+      const end = getRectCorner(rectDraftStart, cursorWorld);
+      addRectangleWalls(rectDraftStart, end);
+      setRectDraftStart(null);
+    }
+
+    if (dragging?.kind === 'marquee') {
+      const rect = normalizeDisplayRect(
+        dragging.startDisplay,
+        dragging.currentDisplay,
+      );
+      const minSize = 4 / stageScale;
+      if (rect.maxX - rect.minX > minSize || rect.maxY - rect.minY > minSize) {
+        const worldRect = displayRectToWorldRect(rect, (p) => fromDisplay(p, ppu));
+        const ids = wallsInWorldRect(walls, worldRect);
+        if (ids.length > 0) setWallSelection(ids);
+      }
+    }
+
+    if (dragging?.kind === 'translate') {
+      translateSnapshot.current.clear();
+      translateExtras.current = null;
+    }
+
+    setDragging(null);
+  };
 
   const draftEnd =
     wallDraftStart && cursorWorld
       ? getSnappedWorld(cursorWorld, wallDraftStart)
       : null;
 
+  const rectDraftEnd =
+    rectDraftStart && cursorWorld ? getRectCorner(rectDraftStart, cursorWorld) : null;
+
+  const rectPreview =
+    rectDraftStart && rectDraftEnd
+      ? rectangleWallSegments(rectangleFromCorners(rectDraftStart, rectDraftEnd))
+      : null;
+
+  const rectDims =
+    rectDraftStart && rectDraftEnd
+      ? rectangleDimensions(rectDraftStart, rectDraftEnd)
+      : null;
+
   const gridLines: number[] = [];
-  const gridStep = ppu ? ppu * 0.5 : 50;
+  const gridStep = gridStepForUnit(unit, ppu);
   const gridExtent = 4000;
   for (let i = -gridExtent; i <= gridExtent; i += gridStep) {
     gridLines.push(i);
@@ -377,9 +606,24 @@ export function FloorPlanCanvas() {
               ? 'grab'
               : tool === 'place'
                 ? 'copy'
-                : 'crosshair',
+                : tool === 'select'
+                  ? dragging?.kind === 'translate'
+                    ? 'move'
+                    : 'default'
+                  : 'crosshair',
         }}
       >
+        {lotSize && (
+          <Layer listening={false}>
+            <PlanLotBoundary
+              lotSize={lotSize}
+              unit={unit}
+              pixelsPerUnit={ppu}
+              stageScale={stageScale}
+            />
+          </Layer>
+        )}
+
         {gridEnabled && (
           <Layer listening={false}>
             {gridLines.map((i) => (
@@ -402,9 +646,11 @@ export function FloorPlanCanvas() {
         )}
 
         <Layer listening={false}>
-          {bgImage && showBackgroundImage && (
+          {bgImage && backgroundVisible && (
             <KonvaImage
               image={bgImage}
+              x={toDisplay(backgroundOffset, ppu).x}
+              y={toDisplay(backgroundOffset, ppu).y}
               opacity={0.55}
               width={imageSize?.width}
               height={imageSize?.height}
@@ -430,33 +676,120 @@ export function FloorPlanCanvas() {
           ))}
 
           {walls.map((wall) => {
+            const selected = isWallSelected(selection, wall.id);
+            const showEndpoints =
+              tool === 'select' &&
+              selection?.type === 'walls' &&
+              selection.ids.length === 1 &&
+              selection.ids[0] === wall.id;
+            const fixedAnchor =
+              showEndpoints && selection.focus?.id === wall.id
+                ? selection.focus.anchor
+                : null;
+            const footprint = wallFootprintPolygon(wall);
+            const pts = footprintToDisplayPoints(footprint, ppu);
             const s = toDisplay(wall.start, ppu);
             const e = toDisplay(wall.end, ppu);
-            const selected = selection?.type === 'wall' && selection.id === wall.id;
-            const thick = (wall.thickness * (ppu ?? 1)) || 4;
+            const handleR = 8 / stageScale;
             return (
               <Group key={wall.id}>
                 <Line
-                  points={[s.x, s.y, e.x, e.y]}
+                  points={pts}
+                  closed
+                  fill={selected ? '#dbeafe' : '#2d2d2d'}
                   stroke={selected ? '#2563eb' : '#1a1a1a'}
-                  strokeWidth={thick}
-                  lineCap="square"
-                  onClick={() => setSelection({ type: 'wall', id: wall.id })}
+                  strokeWidth={1.5 / stageScale}
+                  hitStrokeWidth={Math.max(12 / stageScale, 8)}
                 />
-                {selected && (
+                {showEndpoints && (
                   <>
-                    <Circle x={s.x} y={s.y} radius={6 / stageScale} fill="#2563eb" />
-                    <Circle x={e.x} y={e.y} radius={6 / stageScale} fill="#2563eb" />
+                    <Circle
+                      x={s.x}
+                      y={s.y}
+                      radius={handleR}
+                      fill={fixedAnchor === 'start' ? '#2563eb' : '#fff'}
+                      stroke="#2563eb"
+                      strokeWidth={2 / stageScale}
+                    />
+                    <Circle
+                      x={e.x}
+                      y={e.y}
+                      radius={handleR}
+                      fill={fixedAnchor === 'end' ? '#2563eb' : '#fff'}
+                      stroke="#2563eb"
+                      strokeWidth={2 / stageScale}
+                    />
                   </>
                 )}
               </Group>
             );
           })}
 
+          {dragging?.kind === 'marquee' && (
+            <Rect
+              x={Math.min(dragging.startDisplay.x, dragging.currentDisplay.x)}
+              y={Math.min(dragging.startDisplay.y, dragging.currentDisplay.y)}
+              width={Math.abs(dragging.currentDisplay.x - dragging.startDisplay.x)}
+              height={Math.abs(dragging.currentDisplay.y - dragging.startDisplay.y)}
+              stroke="#2563eb"
+              strokeWidth={1.5 / stageScale}
+              dash={[6 / stageScale, 4 / stageScale]}
+              fill="rgba(37, 99, 235, 0.08)"
+              listening={false}
+            />
+          )}
+
+          {(tool === 'wall' || tool === 'rect') &&
+            walls.map((wall) => {
+              const s = toDisplay(wall.start, ppu);
+              const e = toDisplay(wall.end, ppu);
+              const r = 5 / stageScale;
+              return (
+                <Group key={`${wall.id}-joints`} listening={false}>
+                  <Circle
+                    x={s.x}
+                    y={s.y}
+                    radius={r}
+                    stroke="#16a34a"
+                    strokeWidth={1.5 / stageScale}
+                    fill="rgba(22, 163, 74, 0.15)"
+                  />
+                  <Circle
+                    x={e.x}
+                    y={e.y}
+                    radius={r}
+                    stroke="#16a34a"
+                    strokeWidth={1.5 / stageScale}
+                    fill="rgba(22, 163, 74, 0.15)"
+                  />
+                </Group>
+              );
+            })}
+
+          {activeSnap && activeSnap.kind !== 'none' && (
+            <SnapMarker snap={activeSnap} stageScale={stageScale} />
+          )}
+
+          {wallDraftStart && tool === 'wall' && (
+            <Circle
+              x={toDisplay(wallDraftStart, ppu).x}
+              y={toDisplay(wallDraftStart, ppu).y}
+              radius={7 / stageScale}
+              fill="#16a34a"
+              stroke="#fff"
+              strokeWidth={2 / stageScale}
+              listening={false}
+            />
+          )}
+
           <PlaceableShapes
             furniture={furniture}
             landscape={landscape}
-            selection={selection}
+            selection={
+              selection?.type === 'furniture' || selection?.type === 'landscape'
+                ? selection
+                : null
+            }
             toDisplay={(p) => toDisplay(p, ppu)}
             stageScale={stageScale}
             onSelectFurniture={(id) => setSelection({ type: 'furniture', id })}
@@ -537,6 +870,45 @@ export function FloorPlanCanvas() {
             </>
           )}
 
+          {rectPreview && rectDraftStart && rectDraftEnd && (
+            <>
+              {rectPreview.map((seg, i) => {
+                const s = toDisplay(seg.start, ppu);
+                const e = toDisplay(seg.end, ppu);
+                return (
+                  <Line
+                    key={`rect-preview-${i}`}
+                    points={[s.x, s.y, e.x, e.y]}
+                    stroke="#2563eb"
+                    strokeWidth={2 / stageScale}
+                    dash={[6 / stageScale, 4 / stageScale]}
+                  />
+                );
+              })}
+              {rectDims && (
+                <Text
+                  x={
+                    toDisplay(
+                      { x: (rectDraftStart.x + rectDraftEnd.x) / 2, y: rectDraftStart.y },
+                      ppu,
+                    ).x
+                  }
+                  y={
+                    toDisplay(
+                      { x: (rectDraftStart.x + rectDraftEnd.x) / 2, y: rectDraftStart.y },
+                      ppu,
+                    ).y - 16 / stageScale
+                  }
+                  text={`${formatLength(rectDims.width, unit)} × ${formatLength(rectDims.height, unit)}`}
+                  fontSize={14 / stageScale}
+                  fill="#2563eb"
+                  align="center"
+                  offsetX={40 / stageScale}
+                />
+              )}
+            </>
+          )}
+
           {scaleDraft.pointA && (
             <Circle
               x={scaleDraft.pointA.x}
@@ -566,8 +938,25 @@ export function FloorPlanCanvas() {
               />
             </>
           )}
+
+          <PlanCompassRose
+            cx={compassAnchor.x}
+            cy={compassAnchor.y - 64 / stageScale}
+            northAngleDeg={northAngleDeg}
+            stageScale={stageScale}
+          />
         </Layer>
       </Stage>
+
+      {tool === 'place' && (
+        <div className="length-input-bar place-hint">
+          Click to place{' '}
+          {activePlaceable.category === 'furniture'
+            ? FURNITURE_LABELS[activePlaceable.kind]
+            : LANDSCAPE_LABELS[activePlaceable.kind]}
+          . Select it afterward to edit dimensions.
+        </div>
+      )}
 
       {tool === 'wall' && wallDraftStart && (
         <div className="length-input-bar">
@@ -582,8 +971,64 @@ export function FloorPlanCanvas() {
               onChange={(e) => setPendingLength(e.target.value)}
             />
           </label>
+          <p className="hint" style={{ margin: '0.35rem 0 0' }}>
+            Snap to green corners · Shift locks 45°/90° · Esc to stop
+          </p>
+        </div>
+      )}
+
+      {tool === 'rect' && rectDraftStart && (
+        <div className="length-input-bar">
+          <span className="hint">Drag to size · release to place · Shift for square</span>
+        </div>
+      )}
+
+      {tool === 'select' && (
+        <div className="length-input-bar select-hint-bar">
+          <span className="hint">
+            Drag walls to move on lot (⌘A includes image) · Shift+click multi-select · box-select empty
+          </span>
         </div>
       )}
     </div>
+  );
+}
+
+function SnapMarker({
+  snap,
+  stageScale,
+}: {
+  snap: SnapResult;
+  stageScale: number;
+}) {
+  const { x, y } = snap.point;
+  const isEndpoint = snap.kind === 'endpoint';
+  const color = isEndpoint ? '#16a34a' : '#2563eb';
+  const outer = (isEndpoint ? 14 : 10) / stageScale;
+  const inner = (isEndpoint ? 6 : 4) / stageScale;
+  const arm = (isEndpoint ? 12 : 8) / stageScale;
+
+  return (
+    <Group listening={false}>
+      <Circle
+        x={x}
+        y={y}
+        radius={outer}
+        stroke={color}
+        strokeWidth={2 / stageScale}
+        dash={isEndpoint ? undefined : [4 / stageScale, 3 / stageScale]}
+      />
+      <Circle x={x} y={y} radius={inner} fill={color} opacity={0.45} />
+      <Line
+        points={[x - arm, y, x + arm, y]}
+        stroke={color}
+        strokeWidth={2 / stageScale}
+      />
+      <Line
+        points={[x, y - arm, x, y + arm]}
+        stroke={color}
+        strokeWidth={2 / stageScale}
+      />
+    </Group>
   );
 }

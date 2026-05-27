@@ -10,6 +10,9 @@ export function Viewport3D() {
   const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
   const landscape = useFloorPlanStore((s) => s.landscape) ?? [];
   const wallHeight = useFloorPlanStore((s) => s.wallHeight);
+  const northAngleDeg = useFloorPlanStore((s) => s.northAngleDeg);
+  const sunTime = useFloorPlanStore((s) => s.sunTime);
+  const lotSize = useFloorPlanStore((s) => s.lotSize);
 
   const center = useMemo(() => sceneCenter(walls), [walls]);
   const cameraPos = useMemo<[number, number, number]>(
@@ -19,7 +22,7 @@ export function Viewport3D() {
 
   return (
     <div className="viewport-3d">
-      <h2 className="viewport-title">3D preview</h2>
+      <h2 className="viewport-title">3D preview — double-click to move pivot</h2>
       <Canvas shadows camera={{ position: cameraPos, fov: 45 }}>
         <Suspense fallback={null}>
           <SceneContent
@@ -28,6 +31,9 @@ export function Viewport3D() {
             wallHeight={wallHeight}
             furniture={furniture}
             landscape={landscape}
+            northAngleDeg={northAngleDeg}
+            sunTime={sunTime}
+            lotSize={lotSize}
           />
           <OrbitControls target={center} makeDefault />
         </Suspense>

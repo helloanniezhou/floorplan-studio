@@ -5,10 +5,13 @@ import {
   FURNITURE_LABELS,
   LANDSCAPE_LABELS,
 } from '../lib/placeables/defaults';
+import { SidebarSettings } from './SidebarSettings';
+import { TOOL_SHORTCUT_LABELS } from './useToolShortcuts';
 
 const DRAWING_TOOLS = [
   { id: 'select' as const, label: 'Select', icon: '↖' },
   { id: 'wall' as const, label: 'Wall', icon: '▭' },
+  { id: 'rect' as const, label: 'Rectangle', icon: '⬜' },
   { id: 'door' as const, label: 'Door', icon: '🚪' },
   { id: 'window' as const, label: 'Window', icon: '▢' },
   { id: 'scale' as const, label: 'Scale', icon: '📏' },
@@ -40,11 +43,10 @@ export function Toolbar() {
   const tool = useFloorPlanStore((s) => s.tool);
   const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
   const backgroundImage = useFloorPlanStore((s) => s.backgroundImage);
-  const showBackgroundImage = useFloorPlanStore((s) => s.showBackgroundImage);
+  const backgroundVisible = useFloorPlanStore((s) => s.backgroundVisible);
+  const setBackgroundVisible = useFloorPlanStore((s) => s.setBackgroundVisible);
   const setTool = useFloorPlanStore((s) => s.setTool);
   const startPlace = useFloorPlanStore((s) => s.startPlace);
-  const setShowBackgroundImage = useFloorPlanStore((s) => s.setShowBackgroundImage);
-  const resetPlan = useFloorPlanStore((s) => s.resetPlan);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,36 +98,31 @@ export function Toolbar() {
           <label className="field row toolbar-toggle">
             <input
               type="checkbox"
-              checked={showBackgroundImage}
-              onChange={(e) => setShowBackgroundImage(e.target.checked)}
+              checked={backgroundVisible}
+              onChange={(e) => setBackgroundVisible(e.target.checked)}
             />
             <span>Show uploaded image</span>
           </label>
         )}
-        <button
-          type="button"
-          className="toolbar-btn"
-          onClick={() => {
-            if (confirm('Clear entire plan?')) resetPlan();
-          }}
-        >
-          New plan
-        </button>
       </div>
 
       <div className="toolbar-section">
         <p className="toolbar-label">Tools</p>
-        {DRAWING_TOOLS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`toolbar-btn ${tool === t.id ? 'active' : ''}`}
-            onClick={() => setTool(t.id)}
-          >
-            <span className="tool-icon">{t.icon}</span>
-            {t.label}
-          </button>
-        ))}
+        {DRAWING_TOOLS.map((t) => {
+          const shortcut = TOOL_SHORTCUT_LABELS[t.id];
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`toolbar-btn ${tool === t.id ? 'active' : ''}`}
+              onClick={() => setTool(t.id)}
+            >
+              <span className="tool-icon">{t.icon}</span>
+              <span className="tool-label">{t.label}</span>
+              {shortcut && <kbd className="tool-shortcut">{shortcut}</kbd>}
+            </button>
+          );
+        })}
       </div>
 
       <div className="toolbar-section toolbar-section--highlight">
@@ -157,6 +154,8 @@ export function Toolbar() {
           </button>
         ))}
       </div>
+
+      <SidebarSettings />
     </aside>
   );
 }

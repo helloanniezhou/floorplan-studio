@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
+import { getSelectedWallIds } from '../lib/geometry/selection';
 import { formatLength, wallLength } from '../lib/geometry/vectors';
 import {
   FURNITURE_LABELS,
@@ -6,7 +8,12 @@ import {
 } from '../lib/placeables/defaults';
 
 export function PropertyPanel() {
+  const [minimized, setMinimized] = useState(false);
   const selection = useFloorPlanStore((s) => s.selection);
+  const setWallSelection = useFloorPlanStore((s) => s.setWallSelection);
+  const deleteSelectedWalls = useFloorPlanStore((s) => s.deleteSelectedWalls);
+  const gridEnabled = useFloorPlanStore((s) => s.gridEnabled);
+  const setGridEnabled = useFloorPlanStore((s) => s.setGridEnabled);
   const walls = useFloorPlanStore((s) => s.walls);
   const openings = useFloorPlanStore((s) => s.openings);
   const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
@@ -23,8 +30,16 @@ export function PropertyPanel() {
   const updateLandscape = useFloorPlanStore((s) => s.updateLandscape);
   const deleteLandscape = useFloorPlanStore((s) => s.deleteLandscape);
 
+  const selectedWallIds = getSelectedWallIds(selection);
+  const focus =
+    selection?.type === 'walls' && selection.focus ? selection.focus : null;
   const selectedWall =
-    selection?.type === 'wall' ? walls.find((w) => w.id === selection.id) : null;
+    focus && selection?.type === 'walls'
+      ? walls.find((w) => w.id === focus.id)
+      : selectedWallIds.length === 1
+        ? walls.find((w) => w.id === selectedWallIds[0])
+        : null;
+  const wallAnchor = focus?.anchor ?? 'start';
   const selectedOpening =
     selection?.type === 'opening'
       ? openings.find((o) => o.id === selection.id)
@@ -40,22 +55,64 @@ export function PropertyPanel() {
 
   const selectedPlaceable = selectedFurniture ?? selectedLandscape;
 
-  if (!selectedWall && !selectedOpening && !selectedPlaceable) {
-    return (
-      <aside className="property-panel property-panel--empty">
-        <h2>Properties</h2>
-        <p className="hint">Select a wall, opening, or placed item to edit dimensions.</p>
-      </aside>
-    );
-  }
-
   return (
-    <aside className="property-panel">
-      <h2>Properties</h2>
+    <aside className={`property-panel ${minimized ? 'property-panel--minimized' : ''}`}>
+      <div className="property-panel-header">
+        {!minimized && <h2>Properties</h2>}
+        <button
+          type="button"
+          className="property-panel-toggle"
+          onClick={() => setMinimized((v) => !v)}
+          aria-label={minimized ? 'Expand properties' : 'Minimize properties'}
+        >
+          {minimized ? '◂' : '▸'}
+        </button>
+      </div>
 
-      {selectedWall && (
+      {!minimized && (
+        <div className="property-panel-body">
+      <label className="field">
+        <span>Grid snap</span>
+        <input
+          type="checkbox"
+          checked={gridEnabled}
+          onChange={(e) => setGridEnabled(e.target.checked)}
+        />
+      </label>
+
+      {selectedWallIds.length > 1 && selection?.type === 'walls' && (
+        <div className="panel-block">
+          <h3>{selectedWallIds.length} walls selected</h3>
+          <p className="hint">Drag to move on the lot. ⌘A selects all. Image moves when all walls move.</p>
+          <button type="button" className="toolbar-btn danger" onClick={deleteSelectedWalls}>
+            Delete selected
+          </button>
+        </div>
+      )}
+
+      {selectedWall && selection?.type === 'walls' && selectedWallIds.length === 1 && (
         <div className="panel-block">
           <h3>Wall</h3>
+          <div className="anchor-toggle" role="group" aria-label="Fixed end for length">
+            <button
+              type="button"
+              className={`unit-toggle-btn ${wallAnchor === 'start' ? 'active' : ''}`}
+              onClick={() =>
+                setWallSelection([selectedWall.id], { id: selectedWall.id, anchor: 'start' })
+              }
+            >
+              Fix start
+            </button>
+            <button
+              type="button"
+              className={`unit-toggle-btn ${wallAnchor === 'end' ? 'active' : ''}`}
+              onClick={() =>
+                setWallSelection([selectedWall.id], { id: selectedWall.id, anchor: 'end' })
+              }
+            >
+              Fix end
+            </button>
+          </div>
           <label className="field">
             <span>Length ({unit})</span>
             <input
@@ -64,7 +121,7 @@ export function PropertyPanel() {
               step={0.01}
               value={Number(wallLength(selectedWall).toFixed(3))}
               onChange={(e) =>
-                updateWallLength(selectedWall.id, Number(e.target.value) || 0.01)
+                updateWallLength(selectedWall.id, Number(e.target.value) || 0.01, wallAnchor)
               }
             />
           </label>
@@ -277,6 +334,8 @@ export function PropertyPanel() {
           >
             Delete item
           </button>
+        </div>
+      )}
         </div>
       )}
     </aside>

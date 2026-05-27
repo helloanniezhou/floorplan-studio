@@ -39,9 +39,19 @@ export type TraceParams = {
   orthogonalize: boolean;
 };
 
+export type FloorPlanUnit = 'm' | 'ft';
+
+export type SunTime = 'morning' | 'noon' | 'evening';
+
+export type LotSize = {
+  width: number;
+  depth: number;
+};
+
 export type Tool =
   | 'select'
   | 'wall'
+  | 'rect'
   | 'door'
   | 'window'
   | 'scale'
@@ -103,17 +113,22 @@ export type FloorPlan = {
   openings: Opening[];
   furniture: Furniture[];
   landscape: LandscapeElement[];
-  unit: 'm' | 'ft';
+  unit: FloorPlanUnit;
   wallHeight: number;
   backgroundImage?: string;
   imageSize?: { width: number; height: number };
+  backgroundOffset: Point;
+  backgroundVisible: boolean;
   scale: ScaleInfo | null;
   suggestions: LineSuggestion[];
   traceParams: TraceParams;
+  northAngleDeg: number;
+  sunTime: SunTime;
+  lotSize: LotSize | null;
 };
 
 export type Selection =
-  | { type: 'wall'; id: string }
+  | { type: 'walls'; ids: string[]; focus?: { id: string; anchor: 'start' | 'end' } }
   | { type: 'opening'; id: string }
   | { type: 'furniture'; id: string }
   | { type: 'landscape'; id: string }
@@ -125,8 +140,12 @@ export const DEFAULT_TRACE_PARAMS: TraceParams = {
   houghThreshold: 80,
   minLineLength: 40,
   maxLineGap: 10,
-  orthogonalize: true,
+  orthogonalize: false,
 };
+
+export const DEFAULT_NORTH_ANGLE_DEG = 0;
+export const DEFAULT_SUN_TIME: SunTime = 'morning';
+export const DEFAULT_BACKGROUND_OFFSET: Point = { x: 0, y: 0 };
 
 export const DEFAULT_WALL_THICKNESS_M = 0.15;
 export const DEFAULT_WALL_HEIGHT_M = 2.4;
