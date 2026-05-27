@@ -4,6 +4,11 @@ import type Konva from 'konva';
 import { useFloorPlanStore } from '../store/floorPlanStore';
 import type { Point } from '../types/floorPlan';
 import { findNearestWall, findSnapPoint } from '../lib/geometry/snap';
+import { PlaceableShapes, getPlaceableAtPoint } from './PlaceableShapes';
+import {
+  FURNITURE_LABELS,
+  LANDSCAPE_LABELS,
+} from '../lib/placeables/defaults';
 import {
   distance,
   formatLength,
@@ -47,6 +52,9 @@ export function FloorPlanCanvas() {
 
   const walls = useFloorPlanStore((s) => s.walls);
   const openings = useFloorPlanStore((s) => s.openings);
+  const furniture = useFloorPlanStore((s) => s.furniture);
+  const landscape = useFloorPlanStore((s) => s.landscape);
+  const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
   const suggestions = useFloorPlanStore((s) => s.suggestions);
   const tool = useFloorPlanStore((s) => s.tool);
   const selection = useFloorPlanStore((s) => s.selection);
@@ -62,6 +70,9 @@ export function FloorPlanCanvas() {
   const setSelection = useFloorPlanStore((s) => s.setSelection);
   const setScaleDraftPoint = useFloorPlanStore((s) => s.setScaleDraftPoint);
   const addOpening = useFloorPlanStore((s) => s.addOpening);
+  const placeActiveItem = useFloorPlanStore((s) => s.placeActiveItem);
+  const updateFurniture = useFloorPlanStore((s) => s.updateFurniture);
+  const updateLandscape = useFloorPlanStore((s) => s.updateLandscape);
   const updateWall = useFloorPlanStore((s) => s.updateWall);
   const acceptSuggestion = useFloorPlanStore((s) => s.acceptSuggestion);
   const dismissSuggestion = useFloorPlanStore((s) => s.dismissSuggestion);
@@ -81,6 +92,7 @@ export function FloorPlanCanvas() {
     | null
     | { kind: 'pan'; last: Point }
     | { kind: 'endpoint'; wallId: string; end: 'start' | 'end' }
+    | { kind: 'placeable'; type: 'furniture' | 'landscape'; id: string }
   >(null);
 
   useEffect(() => {
@@ -227,6 +239,11 @@ export function FloorPlanCanvas() {
       return;
     }
 
+    if (tool === 'place') {
+      placeActiveItem(world);
+      return;
+    }
+
     if (tool === 'door' || tool === 'window') {
       const displayWalls = walls.map((w) => ({
         ...w,
@@ -244,6 +261,17 @@ export function FloorPlanCanvas() {
     }
 
     if (tool === 'select') {
+      const placeableHit = getPlaceableAtPoint(world, furniture, landscape);
+      if (placeableHit) {
+        setSelection({ type: placeableHit.type, id: placeableHit.id });
+        setDragging({
+          kind: 'placeable',
+          type: placeableHit.type,
+          id: placeableHit.id,
+        });
+        return;
+      }
+
       const endpointHit = walls.find((w) => {
         const ds = distance(world, w.start);
         const de = distance(world, w.end);
@@ -308,6 +336,14 @@ export function FloorPlanCanvas() {
         }
       }
     }
+
+    if (dragging?.kind === 'placeable') {
+      if (dragging.type === 'furniture') {
+        updateFurniture(dragging.id, { position: world });
+      } else {
+        updateLandscape(dragging.id, { position: world });
+      }
+    }
   };
 
   const handleMouseUp = () => setDragging(null);
@@ -339,7 +375,14 @@ export function FloorPlanCanvas() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        style={{ cursor: tool === 'pan' || spaceDown ? 'grab' : 'crosshair' }}
+        style={{
+          cursor:
+            tool === 'pan' || spaceDown
+              ? 'grab'
+              : tool === 'place'
+                ? 'copy'
+                : 'crosshair',
+        }}
       >
         {gridEnabled && (
           <Layer listening={false}>
@@ -413,6 +456,16 @@ export function FloorPlanCanvas() {
               </Group>
             );
           })}
+
+          <PlaceableShapes
+            furniture={furniture}
+            landscape={landscape}
+            selection={selection}
+            toDisplay={(p) => toDisplay(p, ppu)}
+            stageScale={stageScale}
+            onSelectFurniture={(id) => setSelection({ type: 'furniture', id })}
+            onSelectLandscape={(id) => setSelection({ type: 'landscape', id })}
+          />
 
           {openings.map((opening) => {
             const wall = walls.find((w) => w.id === opening.wallId);
@@ -519,6 +572,16 @@ export function FloorPlanCanvas() {
           )}
         </Layer>
       </Stage>
+
+      {tool === 'place' && (
+        <div className="length-input-bar place-hint">
+          Click to place{' '}
+          {activePlaceable.category === 'furniture'
+            ? FURNITURE_LABELS[activePlaceable.kind]
+            : LANDSCAPE_LABELS[activePlaceable.kind]}
+          . Select it afterward to edit dimensions.
+        </div>
+      )}
 
       {tool === 'wall' && wallDraftStart && (
         <div className="length-input-bar">

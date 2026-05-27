@@ -1,5 +1,10 @@
 import { useRef } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
+import type { FurnitureKind, LandscapeKind } from '../types/floorPlan';
+import {
+  FURNITURE_LABELS,
+  LANDSCAPE_LABELS,
+} from '../lib/placeables/defaults';
 
 const TOOLS = [
   { id: 'select' as const, label: 'Select', icon: '↖' },
@@ -10,9 +15,32 @@ const TOOLS = [
   { id: 'pan' as const, label: 'Pan', icon: '✥' },
 ];
 
+const FURNITURE_ITEMS: { kind: FurnitureKind; icon: string }[] = [
+  { kind: 'kitchenCounter', icon: '▬' },
+  { kind: 'sink', icon: '◯' },
+  { kind: 'toilet', icon: '⌂' },
+  { kind: 'sectionalSofa', icon: '⊔' },
+  { kind: 'table', icon: '▣' },
+  { kind: 'chair', icon: '◫' },
+  { kind: 'gasRange', icon: '▦' },
+  { kind: 'fridge', icon: '▥' },
+];
+
+const LANDSCAPE_ITEMS: { kind: LandscapeKind; icon: string }[] = [
+  { kind: 'tree', icon: '🌳' },
+  { kind: 'shrub', icon: '🌿' },
+  { kind: 'flowerBed', icon: '🌸' },
+  { kind: 'patio', icon: '▧' },
+  { kind: 'path', icon: '═' },
+  { kind: 'lawn', icon: '▤' },
+  { kind: 'pool', icon: '◧' },
+];
+
 export function Toolbar() {
   const tool = useFloorPlanStore((s) => s.tool);
+  const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
   const setTool = useFloorPlanStore((s) => s.setTool);
+  const startPlace = useFloorPlanStore((s) => s.startPlace);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -31,6 +59,15 @@ export function Toolbar() {
     reader.readAsDataURL(file);
     e.target.value = '';
   };
+
+  const placeActive =
+    tool === 'place' &&
+    activePlaceable.category === 'furniture'
+      ? activePlaceable.kind
+      : tool === 'place' &&
+          activePlaceable.category === 'landscape'
+        ? activePlaceable.kind
+        : null;
 
   return (
     <aside className="toolbar">
@@ -60,6 +97,36 @@ export function Toolbar() {
           >
             <span className="tool-icon">{t.icon}</span>
             {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="toolbar-section">
+        <p className="toolbar-label">Indoor furniture</p>
+        {FURNITURE_ITEMS.map((item) => (
+          <button
+            key={item.kind}
+            type="button"
+            className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
+            onClick={() => startPlace({ category: 'furniture', kind: item.kind })}
+          >
+            <span className="tool-icon">{item.icon}</span>
+            {FURNITURE_LABELS[item.kind]}
+          </button>
+        ))}
+      </div>
+
+      <div className="toolbar-section">
+        <p className="toolbar-label">Outdoor landscape</p>
+        {LANDSCAPE_ITEMS.map((item) => (
+          <button
+            key={item.kind}
+            type="button"
+            className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
+            onClick={() => startPlace({ category: 'landscape', kind: item.kind })}
+          >
+            <span className="tool-icon">{item.icon}</span>
+            {LANDSCAPE_LABELS[item.kind]}
           </button>
         ))}
       </div>

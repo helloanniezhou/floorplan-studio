@@ -7,6 +7,8 @@ import { SceneContent, sceneCenter } from './Scene3D';
 export function Viewport3D() {
   const walls = useFloorPlanStore((s) => s.walls);
   const openings = useFloorPlanStore((s) => s.openings);
+  const furniture = useFloorPlanStore((s) => s.furniture);
+  const landscape = useFloorPlanStore((s) => s.landscape);
   const wallHeight = useFloorPlanStore((s) => s.wallHeight);
 
   const center = useMemo(() => sceneCenter(walls), [walls]);
@@ -20,7 +22,13 @@ export function Viewport3D() {
       <h2 className="viewport-title">3D preview</h2>
       <Canvas shadows camera={{ position: cameraPos, fov: 45 }}>
         <Suspense fallback={null}>
-          <SceneContent walls={walls} openings={openings} wallHeight={wallHeight} />
+          <SceneContent
+            walls={walls}
+            openings={openings}
+            wallHeight={wallHeight}
+            furniture={furniture}
+            landscape={landscape}
+          />
           <OrbitControls target={center} makeDefault />
         </Suspense>
       </Canvas>

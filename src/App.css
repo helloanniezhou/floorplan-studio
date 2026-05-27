@@ -24,7 +24,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: 200px 1fr 240px;
+  grid-template-columns: 220px 1fr 260px;
   min-height: 100vh;
 }
 
@@ -35,6 +35,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  overflow-y: auto;
+  max-height: 100vh;
 }
 
 .toolbar-title {
@@ -138,6 +140,11 @@ body {
 .length-input-bar input {
   margin-left: 0.5rem;
   width: 120px;
+}
+
+.length-input-bar.place-hint {
+  font-size: 0.8rem;
+  max-width: min(420px, calc(100% - 24px));
 }
 
 .scale-banner {

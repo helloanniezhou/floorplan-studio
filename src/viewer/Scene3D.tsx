@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import type { Opening, Wall } from '../types/floorPlan';
+import type { Furniture, LandscapeElement, Opening, Wall } from '../types/floorPlan';
+import { FurnitureMeshes, LandscapeMeshes } from './PlaceableMeshes';
 import { splitWallForOpenings, boundsFromWalls } from '../lib/walls3d/miter';
 
 function polygonToShape(polygon: { x: number; y: number }[]): THREE.Shape {
@@ -92,10 +93,14 @@ export function SceneContent({
   walls,
   openings,
   wallHeight,
+  furniture,
+  landscape,
 }: {
   walls: Wall[];
   openings: Opening[];
   wallHeight: number;
+  furniture: Furniture[];
+  landscape: LandscapeElement[];
 }) {
   return (
     <>
@@ -103,6 +108,8 @@ export function SceneContent({
       <directionalLight position={[8, 12, 6]} intensity={1.1} castShadow />
       <FloorPlane walls={walls} />
       <WallMeshes walls={walls} openings={openings} wallHeight={wallHeight} />
+      <FurnitureMeshes items={furniture} />
+      <LandscapeMeshes items={landscape} />
     </>
   );
 }

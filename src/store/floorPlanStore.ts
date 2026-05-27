@@ -2,9 +2,15 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import type {
+  ActivePlaceable,
   FloorPlan,
+  Furniture,
+  FurnitureKind,
+  LandscapeElement,
+  LandscapeKind,
   LineSuggestion,
   Opening,
+  PlaceableDimensions,
   Point,
   ScaleInfo,
   Selection,
@@ -12,6 +18,10 @@ import type {
   TraceParams,
   Wall,
 } from '../types/floorPlan';
+import {
+  FURNITURE_DEFAULTS,
+  LANDSCAPE_DEFAULTS,
+} from '../lib/placeables/defaults';
 import {
   DEFAULT_DOOR_HEIGHT_M,
   DEFAULT_DOOR_WIDTH_M,
@@ -34,6 +44,7 @@ type ScaleDraft = {
 type FloorPlanState = FloorPlan & {
   tool: Tool;
   selection: Selection;
+  activePlaceable: ActivePlaceable;
   gridEnabled: boolean;
   scaleDraft: ScaleDraft;
   wallDraftStart: Point | null;
@@ -41,6 +52,8 @@ type FloorPlanState = FloorPlan & {
   traceLoading: boolean;
 
   setTool: (tool: Tool) => void;
+  setActivePlaceable: (placeable: ActivePlaceable) => void;
+  startPlace: (placeable: ActivePlaceable) => void;
   setSelection: (selection: Selection) => void;
   setGridEnabled: (enabled: boolean) => void;
   setPendingLength: (value: string) => void;
@@ -68,6 +81,26 @@ type FloorPlanState = FloorPlan & {
   updateOpening: (id: string, patch: Partial<Opening>) => void;
   deleteOpening: (id: string) => void;
 
+  addFurniture: (
+    kind: FurnitureKind,
+    position: Point,
+    dimensions?: Partial<PlaceableDimensions>,
+    rotation?: number,
+  ) => string;
+  updateFurniture: (id: string, patch: Partial<Furniture>) => void;
+  deleteFurniture: (id: string) => void;
+
+  addLandscape: (
+    kind: LandscapeKind,
+    position: Point,
+    dimensions?: Partial<PlaceableDimensions>,
+    rotation?: number,
+  ) => string;
+  updateLandscape: (id: string, patch: Partial<LandscapeElement>) => void;
+  deleteLandscape: (id: string) => void;
+
+  placeActiveItem: (position: Point) => string;
+
   setSuggestions: (suggestions: LineSuggestion[]) => void;
   acceptSuggestion: (id: string) => void;
   dismissSuggestion: (id: string) => void;
@@ -80,9 +113,16 @@ type FloorPlanState = FloorPlan & {
   resetPlan: () => void;
 };
 
+const DEFAULT_ACTIVE_PLACEABLE: ActivePlaceable = {
+  category: 'furniture',
+  kind: 'kitchenCounter',
+};
+
 const initialPlan: FloorPlan = {
   walls: [],
   openings: [],
+  furniture: [],
+  landscape: [],
   unit: 'm',
   wallHeight: DEFAULT_WALL_HEIGHT_M,
   scale: null,
@@ -96,6 +136,7 @@ export const useFloorPlanStore = create<FloorPlanState>()(
       ...initialPlan,
       tool: 'wall',
       selection: null,
+      activePlaceable: DEFAULT_ACTIVE_PLACEABLE,
       gridEnabled: true,
       scaleDraft: { pointA: null, pointB: null },
       wallDraftStart: null,
@@ -106,6 +147,17 @@ export const useFloorPlanStore = create<FloorPlanState>()(
         set({
           tool,
           selection: tool === 'select' ? get().selection : null,
+          wallDraftStart: null,
+          scaleDraft: { pointA: null, pointB: null },
+        }),
+
+      setActivePlaceable: (activePlaceable) => set({ activePlaceable }),
+
+      startPlace: (activePlaceable) =>
+        set({
+          tool: 'place',
+          activePlaceable,
+          selection: null,
           wallDraftStart: null,
           scaleDraft: { pointA: null, pointB: null },
         }),
@@ -124,6 +176,8 @@ export const useFloorPlanStore = create<FloorPlanState>()(
           scale: null,
           walls: [],
           openings: [],
+          furniture: [],
+          landscape: [],
           suggestions: [],
         }),
 
@@ -252,6 +306,82 @@ export const useFloorPlanStore = create<FloorPlanState>()(
         });
       },
 
+      addFurniture: (kind, position, dimensions, rotation = 0) => {
+        const defaults = FURNITURE_DEFAULTS[kind];
+        const item: Furniture = {
+          id: uuidv4(),
+          category: 'furniture',
+          kind,
+          position,
+          width: dimensions?.width ?? defaults.width,
+          depth: dimensions?.depth ?? defaults.depth,
+          height: dimensions?.height ?? defaults.height,
+          rotation,
+        };
+        set({
+          furniture: [...get().furniture, item],
+          selection: { type: 'furniture', id: item.id },
+        });
+        return item.id;
+      },
+
+      updateFurniture: (id, patch) =>
+        set({
+          furniture: get().furniture.map((f) =>
+            f.id === id ? { ...f, ...patch } : f,
+          ),
+        }),
+
+      deleteFurniture: (id) => {
+        const sel = get().selection;
+        set({
+          furniture: get().furniture.filter((f) => f.id !== id),
+          selection: sel?.type === 'furniture' && sel.id === id ? null : sel,
+        });
+      },
+
+      addLandscape: (kind, position, dimensions, rotation = 0) => {
+        const defaults = LANDSCAPE_DEFAULTS[kind];
+        const item: LandscapeElement = {
+          id: uuidv4(),
+          category: 'landscape',
+          kind,
+          position,
+          width: dimensions?.width ?? defaults.width,
+          depth: dimensions?.depth ?? defaults.depth,
+          height: dimensions?.height ?? defaults.height,
+          rotation,
+        };
+        set({
+          landscape: [...get().landscape, item],
+          selection: { type: 'landscape', id: item.id },
+        });
+        return item.id;
+      },
+
+      updateLandscape: (id, patch) =>
+        set({
+          landscape: get().landscape.map((l) =>
+            l.id === id ? { ...l, ...patch } : l,
+          ),
+        }),
+
+      deleteLandscape: (id) => {
+        const sel = get().selection;
+        set({
+          landscape: get().landscape.filter((l) => l.id !== id),
+          selection: sel?.type === 'landscape' && sel.id === id ? null : sel,
+        });
+      },
+
+      placeActiveItem: (position) => {
+        const { activePlaceable, addFurniture, addLandscape } = get();
+        if (activePlaceable.category === 'furniture') {
+          return addFurniture(activePlaceable.kind, position);
+        }
+        return addLandscape(activePlaceable.kind, position);
+      },
+
       setSuggestions: (suggestions) => set({ suggestions }),
 
       acceptSuggestion: (id) => {
@@ -308,6 +438,8 @@ export const useFloorPlanStore = create<FloorPlanState>()(
       importPlan: (plan) =>
         set({
           ...plan,
+          furniture: plan.furniture ?? [],
+          landscape: plan.landscape ?? [],
           traceParams: plan.traceParams ?? DEFAULT_TRACE_PARAMS,
         }),
 
@@ -315,6 +447,8 @@ export const useFloorPlanStore = create<FloorPlanState>()(
         const {
           walls,
           openings,
+          furniture,
+          landscape,
           unit,
           wallHeight,
           backgroundImage,
@@ -326,6 +460,8 @@ export const useFloorPlanStore = create<FloorPlanState>()(
         return {
           walls,
           openings,
+          furniture,
+          landscape,
           unit,
           wallHeight,
           backgroundImage,
@@ -351,6 +487,8 @@ export const useFloorPlanStore = create<FloorPlanState>()(
       partialize: (state) => ({
         walls: state.walls,
         openings: state.openings,
+        furniture: state.furniture,
+        landscape: state.landscape,
         unit: state.unit,
         wallHeight: state.wallHeight,
         backgroundImage: state.backgroundImage,

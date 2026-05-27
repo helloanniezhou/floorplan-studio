@@ -45,11 +45,64 @@ export type Tool =
   | 'door'
   | 'window'
   | 'scale'
-  | 'pan';
+  | 'pan'
+  | 'place';
+
+export type PlaceableDimensions = {
+  width: number;
+  depth: number;
+  height: number;
+};
+
+export type FurnitureKind =
+  | 'kitchenCounter'
+  | 'sink'
+  | 'toilet'
+  | 'sectionalSofa'
+  | 'table'
+  | 'chair'
+  | 'gasRange'
+  | 'fridge';
+
+export type LandscapeKind =
+  | 'tree'
+  | 'shrub'
+  | 'flowerBed'
+  | 'patio'
+  | 'path'
+  | 'lawn'
+  | 'pool';
+
+export type PlaceableCategory = 'furniture' | 'landscape';
+
+export type ActivePlaceable =
+  | { category: 'furniture'; kind: FurnitureKind }
+  | { category: 'landscape'; kind: LandscapeKind };
+
+export type PlacedItemBase = {
+  id: string;
+  position: Point;
+  width: number;
+  depth: number;
+  height: number;
+  rotation: number;
+};
+
+export type Furniture = PlacedItemBase & {
+  category: 'furniture';
+  kind: FurnitureKind;
+};
+
+export type LandscapeElement = PlacedItemBase & {
+  category: 'landscape';
+  kind: LandscapeKind;
+};
 
 export type FloorPlan = {
   walls: Wall[];
   openings: Opening[];
+  furniture: Furniture[];
+  landscape: LandscapeElement[];
   unit: 'm' | 'ft';
   wallHeight: number;
   backgroundImage?: string;
@@ -62,6 +115,8 @@ export type FloorPlan = {
 export type Selection =
   | { type: 'wall'; id: string }
   | { type: 'opening'; id: string }
+  | { type: 'furniture'; id: string }
+  | { type: 'landscape'; id: string }
   | null;
 
 export const DEFAULT_TRACE_PARAMS: TraceParams = {
