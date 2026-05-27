@@ -19,12 +19,15 @@ function App() {
       <Toolbar />
       <div className="main-column">
         <ActionBar />
-        <main className={`workspace ${show3DPreview ? 'workspace--with-3d' : ''}`}>
-          <div className="editor-column">
-            <ScaleDialog />
-            <FloorPlanCanvas />
-          </div>
-          {show3DPreview && <Viewport3D />}
+        <main className="workspace">
+          {show3DPreview ? (
+            <Viewport3D />
+          ) : (
+            <div className="editor-column">
+              <ScaleDialog />
+              <FloorPlanCanvas />
+            </div>
+          )}
         </main>
       </div>
       <PropertyPanel />

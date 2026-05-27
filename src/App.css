@@ -399,16 +399,12 @@ body {
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
   min-height: 0;
   border-right: 1px solid #e5e2db;
-}
-
-.workspace--with-3d {
-  grid-template-columns: 1fr 360px;
 }
 
 .editor-column {
@@ -606,8 +602,9 @@ body {
 .viewport-3d {
   display: flex;
   flex-direction: column;
-  background: #e7e5e4;
+  flex: 1;
   min-height: 0;
+  background: #e7e5e4;
 }
 
 .viewport-title {
@@ -634,11 +631,7 @@ body {
     border-top: 1px solid #e5e2db;
   }
 
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
   .viewport-3d {
-    min-height: 320px;
+    min-height: 280px;
   }
 }
