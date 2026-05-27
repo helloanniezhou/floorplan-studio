@@ -1,4 +1,8 @@
 import type { OpeningType } from '../../types/floorPlan';
+import { feetToMeters } from '../geometry/vectors';
+
+/** Snap and visible grid spacing in real-world units */
+export const GRID_STEP_FT = 0.5;
 
 /** California / US residential defaults (imperial). */
 
@@ -63,6 +67,7 @@ export function defaultOpeningHeight(type: OpeningType, unit: 'm' | 'ft'): numbe
 }
 
 export function gridStepForUnit(unit: 'm' | 'ft', pixelsPerUnit: number | null): number {
-  if (!pixelsPerUnit) return unit === 'ft' ? 12 : 10;
-  return unit === 'ft' ? pixelsPerUnit * 1 : pixelsPerUnit * 0.5;
+  const stepWorld = unit === 'ft' ? GRID_STEP_FT : feetToMeters(GRID_STEP_FT);
+  if (!pixelsPerUnit) return unit === 'ft' ? 6 : 8;
+  return pixelsPerUnit * stepWorld;
 }
