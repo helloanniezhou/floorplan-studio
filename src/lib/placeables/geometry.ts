@@ -35,6 +35,20 @@ export function pointInRect(point: Point, rect: PlacedRect): boolean {
   return Math.abs(lx) <= rect.width / 2 && Math.abs(ly) <= rect.depth / 2;
 }
 
+/** Hit test for rotated ellipse (width/depth are full diameters on each axis). */
+export function pointInEllipse(point: Point, rect: PlacedRect): boolean {
+  const dx = point.x - rect.position.x;
+  const dy = point.y - rect.position.y;
+  const c = Math.cos(-rect.rotation);
+  const s = Math.sin(-rect.rotation);
+  const lx = dx * c - dy * s;
+  const ly = dx * s + dy * c;
+  const rx = rect.width / 2;
+  const ry = rect.depth / 2;
+  if (rx < 1e-6 || ry < 1e-6) return false;
+  return (lx * lx) / (rx * rx) + (ly * ly) / (ry * ry) <= 1;
+}
+
 export function findRectAtPoint(
   point: Point,
   items: PlacedRect[],

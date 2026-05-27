@@ -55,9 +55,18 @@ export const FURNITURE_DEFAULTS: Record<FurnitureKind, PlaceableDimensions> =
     ]),
   ) as Record<FurnitureKind, PlaceableDimensions>;
 
+/** Landscape drawn as ovals in plan view (canopy / planting bed footprint). */
+export const OVAL_LANDSCAPE_KINDS: LandscapeKind[] = ['tree', 'shrub'];
+
+export function isOvalLandscapeKind(kind: LandscapeKind): boolean {
+  return OVAL_LANDSCAPE_KINDS.includes(kind);
+}
+
 export const LANDSCAPE_DEFAULTS: Record<LandscapeKind, PlaceableDimensions> = {
-  tree: { width: 3, depth: 3, height: 4 },
-  shrub: { width: 1.2, depth: 1.2, height: 0.8 },
+  /** Oval canopy ~12' × 10' */
+  tree: { width: 4, depth: 3, height: 4 },
+  /** Oval shrub mass ~5' × 3' */
+  shrub: { width: 1.5, depth: 1, height: 0.8 },
   flowerBed: { width: 2, depth: 1, height: 0.3 },
   patio: { width: 3, depth: 3, height: 0.1 },
   path: { width: 1.2, depth: 4, height: 0.05 },

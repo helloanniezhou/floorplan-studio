@@ -1,4 +1,5 @@
 import type { Furniture, LandscapeElement } from '../types/floorPlan';
+import { isOvalLandscapeKind } from '../lib/placeables/defaults';
 import {
   FURNITURE_COLORS,
   LANDSCAPE_COLORS,
@@ -34,6 +35,29 @@ function PlaceableBoxMesh({
   );
 }
 
+/** Tree / shrub: ellipsoid canopy (oval footprint). */
+function OvalLandscapeMesh({
+  position,
+  width,
+  depth,
+  height,
+  rotation,
+  color,
+}: MeshProps) {
+  return (
+    <mesh
+      position={[position.x, height / 2, position.y]}
+      rotation={[0, -rotation, 0]}
+      scale={[width / 2, height / 2, depth / 2]}
+      castShadow
+      receiveShadow
+    >
+      <sphereGeometry args={[1, 20, 14]} />
+      <meshStandardMaterial color={color} roughness={0.85} />
+    </mesh>
+  );
+}
+
 export function FurnitureMeshes({ items }: { items: Furniture[] }) {
   return (
     <>
@@ -55,17 +79,20 @@ export function FurnitureMeshes({ items }: { items: Furniture[] }) {
 export function LandscapeMeshes({ items }: { items: LandscapeElement[] }) {
   return (
     <>
-      {items.map((item) => (
-        <PlaceableBoxMesh
-          key={item.id}
-          position={item.position}
-          width={item.width}
-          depth={item.depth}
-          height={item.height}
-          rotation={item.rotation}
-          color={LANDSCAPE_COLORS[item.kind]}
-        />
-      ))}
+      {items.map((item) => {
+        const props = {
+          position: item.position,
+          width: item.width,
+          depth: item.depth,
+          height: item.height,
+          rotation: item.rotation,
+          color: LANDSCAPE_COLORS[item.kind],
+        };
+        if (isOvalLandscapeKind(item.kind)) {
+          return <OvalLandscapeMesh key={item.id} {...props} />;
+        }
+        return <PlaceableBoxMesh key={item.id} {...props} />;
+      })}
     </>
   );
 }
