@@ -6,6 +6,7 @@ import {
   LANDSCAPE_LABELS,
 } from '../lib/placeables/defaults';
 import { SidebarSettings } from './SidebarSettings';
+import { CollapsibleToolbarSection } from './CollapsibleToolbarSection';
 import { TOOL_SHORTCUT_LABELS } from './useToolShortcuts';
 
 const DRAWING_TOOLS = [
@@ -79,80 +80,89 @@ export function Toolbar() {
     <aside className="toolbar">
       <h1 className="toolbar-title">Floor Plan Studio</h1>
 
-      <div className="toolbar-section">
-        <button
-          type="button"
-          className="toolbar-btn primary"
-          onClick={() => fileRef.current?.click()}
+      <div className="toolbar-scroll">
+        <CollapsibleToolbarSection id="project" title="Project" defaultOpen>
+          <button
+            type="button"
+            className="toolbar-btn primary"
+            onClick={() => fileRef.current?.click()}
+          >
+            Upload plan
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={handleUpload}
+          />
+          {backgroundImage && (
+            <label className="field row toolbar-toggle">
+              <input
+                type="checkbox"
+                checked={backgroundVisible}
+                onChange={(e) => setBackgroundVisible(e.target.checked)}
+              />
+              <span>Show uploaded image</span>
+            </label>
+          )}
+        </CollapsibleToolbarSection>
+
+        <CollapsibleToolbarSection id="tools" title="Tools" defaultOpen>
+          {DRAWING_TOOLS.map((t) => {
+            const shortcut = TOOL_SHORTCUT_LABELS[t.id];
+            return (
+              <button
+                key={t.id}
+                type="button"
+                className={`toolbar-btn ${tool === t.id ? 'active' : ''}`}
+                onClick={() => setTool(t.id)}
+              >
+                <span className="tool-icon">{t.icon}</span>
+                <span className="tool-label">{t.label}</span>
+                {shortcut && <kbd className="tool-shortcut">{shortcut}</kbd>}
+              </button>
+            );
+          })}
+        </CollapsibleToolbarSection>
+
+        <CollapsibleToolbarSection
+          id="furniture"
+          title="Indoor furniture"
+          defaultOpen={false}
+          highlight
         >
-          Upload plan
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={handleUpload}
-        />
-        {backgroundImage && (
-          <label className="field row toolbar-toggle">
-            <input
-              type="checkbox"
-              checked={backgroundVisible}
-              onChange={(e) => setBackgroundVisible(e.target.checked)}
-            />
-            <span>Show uploaded image</span>
-          </label>
-        )}
-      </div>
-
-      <div className="toolbar-section">
-        <p className="toolbar-label">Tools</p>
-        {DRAWING_TOOLS.map((t) => {
-          const shortcut = TOOL_SHORTCUT_LABELS[t.id];
-          return (
+          {FURNITURE_ITEMS.map((item) => (
             <button
-              key={t.id}
+              key={item.kind}
               type="button"
-              className={`toolbar-btn ${tool === t.id ? 'active' : ''}`}
-              onClick={() => setTool(t.id)}
+              className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
+              onClick={() => startPlace({ category: 'furniture', kind: item.kind })}
             >
-              <span className="tool-icon">{t.icon}</span>
-              <span className="tool-label">{t.label}</span>
-              {shortcut && <kbd className="tool-shortcut">{shortcut}</kbd>}
+              <span className="tool-icon">{item.icon}</span>
+              {FURNITURE_LABELS[item.kind]}
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </CollapsibleToolbarSection>
 
-      <div className="toolbar-section toolbar-section--highlight">
-        <p className="toolbar-label">Indoor furniture</p>
-        {FURNITURE_ITEMS.map((item) => (
-          <button
-            key={item.kind}
-            type="button"
-            className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
-            onClick={() => startPlace({ category: 'furniture', kind: item.kind })}
-          >
-            <span className="tool-icon">{item.icon}</span>
-            {FURNITURE_LABELS[item.kind]}
-          </button>
-        ))}
-      </div>
-
-      <div className="toolbar-section toolbar-section--highlight">
-        <p className="toolbar-label">Outdoor landscape</p>
-        {LANDSCAPE_ITEMS.map((item) => (
-          <button
-            key={item.kind}
-            type="button"
-            className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
-            onClick={() => startPlace({ category: 'landscape', kind: item.kind })}
-          >
-            <span className="tool-icon">{item.icon}</span>
-            {LANDSCAPE_LABELS[item.kind]}
-          </button>
-        ))}
+        <CollapsibleToolbarSection
+          id="landscape"
+          title="Outdoor landscape"
+          defaultOpen={false}
+          highlight
+        >
+          {LANDSCAPE_ITEMS.map((item) => (
+            <button
+              key={item.kind}
+              type="button"
+              className={`toolbar-btn ${placeActive === item.kind ? 'active' : ''}`}
+              onClick={() => startPlace({ category: 'landscape', kind: item.kind })}
+            >
+              <span className="tool-icon">{item.icon}</span>
+              {LANDSCAPE_LABELS[item.kind]}
+            </button>
+          ))}
+        </CollapsibleToolbarSection>
       </div>
 
       <SidebarSettings />
