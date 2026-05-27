@@ -40,6 +40,7 @@ import {
 import { boundsFromWalls } from '../lib/walls3d/miter';
 import { PlanCompassRose } from './PlanCompassRose';
 import { PlanLotBoundary } from './PlanLotBoundary';
+import { EnclosedAreaReadout } from './EnclosedAreaReadout';
 
 const SNAP_RADIUS = 18;
 const MIN_ZOOM = 0.1;
@@ -587,6 +588,7 @@ export function FloorPlanCanvas() {
 
   return (
     <div ref={containerRef} className="canvas-wrap">
+      <EnclosedAreaReadout />
       <Stage
         ref={stageRef}
         width={size.width}
