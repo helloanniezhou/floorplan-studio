@@ -25,11 +25,10 @@ export function useToolShortcuts(): void {
 
       if (e.key === 'Backspace' || e.key === 'Delete') {
         if (e.metaKey || e.ctrlKey || e.altKey) return;
-        const { selection, deleteSelectedWalls, deleteOpening } = useFloorPlanStore.getState();
+        const { selection, deleteSelection } = useFloorPlanStore.getState();
         if (!selection) return;
         e.preventDefault();
-        if (selection.type === 'walls') deleteSelectedWalls();
-        else deleteOpening(selection.id);
+        deleteSelection();
         return;
       }
 

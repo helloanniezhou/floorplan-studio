@@ -94,6 +94,7 @@ type FloorPlanState = FloorPlan & {
   toggleWallSelection: (id: string, additive: boolean) => void;
   selectAllWalls: () => void;
   deleteSelectedWalls: () => void;
+  deleteSelection: () => void;
   setGridEnabled: (enabled: boolean) => void;
   setPendingLength: (value: string) => void;
   setTraceParams: (params: Partial<TraceParams>) => void;
@@ -360,6 +361,25 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       openings: get().openings.filter((o) => !idSet.has(o.wallId)),
       selection: null,
     });
+  },
+
+  deleteSelection: () => {
+    const sel = get().selection;
+    if (!sel) return;
+    switch (sel.type) {
+      case 'walls':
+        get().deleteSelectedWalls();
+        break;
+      case 'opening':
+        get().deleteOpening(sel.id);
+        break;
+      case 'furniture':
+        get().deleteFurniture(sel.id);
+        break;
+      case 'landscape':
+        get().deleteLandscape(sel.id);
+        break;
+    }
   },
 
   setGridEnabled: (gridEnabled) => set({ gridEnabled }),

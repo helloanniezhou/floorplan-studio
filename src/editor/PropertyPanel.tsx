@@ -83,7 +83,7 @@ export function PropertyPanel() {
       {selectedWallIds.length > 1 && selection?.type === 'walls' && (
         <div className="panel-block">
           <h3>{selectedWallIds.length} walls selected</h3>
-          <p className="hint">Drag to move on the lot. ⌘A selects all. Image moves when all walls move.</p>
+          <p className="hint">Drag to move on the lot. ⌘A selects all. Delete or Backspace removes selection.</p>
           <button type="button" className="toolbar-btn danger" onClick={deleteSelectedWalls}>
             Delete selected
           </button>
@@ -138,6 +138,7 @@ export function PropertyPanel() {
               }
             />
           </label>
+          <p className="hint">Delete or Backspace removes this wall.</p>
           <button type="button" className="toolbar-btn danger" onClick={() => deleteWall(selectedWall.id)}>
             Delete wall
           </button>
@@ -199,6 +200,7 @@ export function PropertyPanel() {
               />
             </label>
           )}
+          <p className="hint">Delete or Backspace removes this opening.</p>
           <button
             type="button"
             className="toolbar-btn danger"
@@ -321,6 +323,7 @@ export function PropertyPanel() {
               }}
             />
           </label>
+          <p className="hint">Delete or Backspace removes this item.</p>
           <button
             type="button"
             className="toolbar-btn danger"
