@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
+import { PlanUploadControls } from './PlanUploadControls';
 import { ProjectControls } from './ProjectControls';
 
 export function ActionBar() {
@@ -37,6 +38,7 @@ export function ActionBar() {
   return (
     <header className="action-bar">
       <ProjectControls />
+      <PlanUploadControls />
 
       <div className="action-bar-group">
         <button
