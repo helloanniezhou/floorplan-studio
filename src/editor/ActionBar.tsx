@@ -46,7 +46,7 @@ export function ActionBar({ projectsView, onToggleProjectsView }: Props) {
       <PlanUploadControls />
       <div className="action-bar-group">
         <button type="button" className="action-bar-btn" onClick={onToggleProjectsView}>
-          {projectsView ? 'Back to editor' : 'Projects'}
+          {projectsView ? 'Editor' : 'Projects'}
         </button>
       </div>
 

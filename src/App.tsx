@@ -27,7 +27,13 @@ function App() {
   if (projectsView) {
     return (
       <div className="app app--projects-only">
-        <ProjectsPage onBack={() => setProjectsView(false)} standalone />
+        <header className="app-action-bar-wrap">
+          <ActionBar
+            projectsView={projectsView}
+            onToggleProjectsView={() => setProjectsView(false)}
+          />
+        </header>
+        <ProjectsPage onProjectOpened={() => setProjectsView(false)} standalone />
       </div>
     );
   }

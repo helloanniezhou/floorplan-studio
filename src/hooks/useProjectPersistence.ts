@@ -495,6 +495,11 @@ export function useProjectPersistence() {
     return backend.list();
   }, [backend]);
 
+  const getProjectById = useCallback(
+    async (id: string): Promise<SavedProject | undefined> => backend.get(id),
+    [backend],
+  );
+
   const renameAnyProject = useCallback(
     async (id: string, name: string) => {
       const trimmed = name.trim() || 'Untitled plan';
@@ -532,6 +537,7 @@ export function useProjectPersistence() {
     removeProject,
     renameAnyProject,
     fetchProjectList,
+    getProjectById,
     importLocalBrowserProjects,
   };
 }

@@ -1,22 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SavedProjectMeta } from '../lib/storage/projectStorage';
+import { getProjectPreviewUrl } from '../lib/plans/planPreview';
 import { useProjectPersistence } from '../hooks/useProjectPersistence';
+import { ProjectCard } from './ProjectCard';
 
-function formatDate(ts: number): string {
-  return new Date(ts).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+type PreviewState = {
+  src: string | null;
+  loading: boolean;
+};
 
 export function ProjectsPage({
-  onBack,
+  onProjectOpened,
   standalone = false,
 }: {
-  onBack: () => void;
+  onProjectOpened: () => void;
   standalone?: boolean;
 }) {
   const {
@@ -25,6 +22,7 @@ export function ProjectsPage({
     signInWithGoogle,
     signOut,
     fetchProjectList,
+    getProjectById,
     loadProject,
     removeProject,
     renameAnyProject,
@@ -32,6 +30,7 @@ export function ProjectsPage({
     importLocalBrowserProjects,
   } = useProjectPersistence();
   const [projects, setProjects] = useState<SavedProjectMeta[]>([]);
+  const [previews, setPreviews] = useState<Record<string, PreviewState>>({});
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
@@ -59,20 +58,55 @@ export function ProjectsPage({
   useEffect(() => {
     if (!cloudMode) {
       setProjects([]);
+      setPreviews({});
       setLoading(false);
       return;
     }
     void refreshProjects();
   }, [cloudMode, fetchProjectList]);
 
+  useEffect(() => {
+    if (!cloudMode || projects.length === 0) return;
+
+    let cancelled = false;
+    for (const project of projects) {
+      setPreviews((prev) => ({
+        ...prev,
+        [project.id]: { src: prev[project.id]?.src ?? null, loading: true },
+      }));
+
+      void getProjectById(project.id)
+        .then((saved) => {
+          if (cancelled) return;
+          const src = saved ? getProjectPreviewUrl(project.id, saved.plan) : null;
+          setPreviews((prev) => ({
+            ...prev,
+            [project.id]: { src, loading: false },
+          }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setPreviews((prev) => ({
+            ...prev,
+            [project.id]: { src: null, loading: false },
+          }));
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudMode, projects, getProjectById]);
+
+  const openProject = (id: string) => {
+    void loadProject(id).then(() => onProjectOpened());
+  };
+
   if (!cloudMode) {
     return (
       <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
         <header className="projects-header">
           <h2>Projects</h2>
-          <button type="button" className="action-bar-btn" onClick={onBack}>
-            Back to editor
-          </button>
         </header>
         <div className="projects-empty">
           <p>Sign in with Google to manage projects for your account in Supabase.</p>
@@ -101,13 +135,10 @@ export function ProjectsPage({
             type="button"
             className="action-bar-btn"
             onClick={() => {
-              void createNewProject().then(() => onBack());
+              void createNewProject().then(() => onProjectOpened());
             }}
           >
             New project
-          </button>
-          <button type="button" className="action-bar-btn" onClick={onBack}>
-            Back to editor
           </button>
         </div>
       </header>
@@ -152,67 +183,35 @@ export function ProjectsPage({
       )}
       {!loading && projects.length > 0 && (
         <ul className="projects-grid">
-          {projects.map((project) => (
-            <li key={project.id} className="projects-card">
-              <div className="projects-card-header">
-                {editingId === project.id ? (
-                  <input
-                    className="project-name-input"
-                    value={nameDraft}
-                    onChange={(e) => setNameDraft(e.target.value)}
-                    onBlur={() => {
-                      void renameAnyProject(project.id, nameDraft);
-                      setEditingId(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        void renameAnyProject(project.id, nameDraft);
-                        setEditingId(null);
-                      }
-                    }}
-                    autoFocus
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="project-name-btn"
-                    onClick={() => {
-                      setEditingId(project.id);
-                      setNameDraft(project.name);
-                    }}
-                  >
-                    {project.name}
-                  </button>
-                )}
-                <span className="muted">{formatDate(project.updatedAt)}</span>
-              </div>
-              <div className="projects-card-actions">
-                <button
-                  type="button"
-                  className="action-bar-btn"
-                  onClick={() => {
-                    void loadProject(project.id);
-                    onBack();
-                  }}
-                >
-                  Open
-                </button>
-                <button
-                  type="button"
-                  className="action-bar-btn"
-                  onClick={() => {
-                    if (window.confirm(`Delete "${project.name}"? This cannot be undone.`)) {
-                      void removeProject(project.id).then(() =>
-                        setProjects((prev) => prev.filter((p) => p.id !== project.id)),
-                      );
-                    }
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
+          {projects.map((project) => {
+            const preview = previews[project.id];
+            return (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                previewSrc={preview?.src ?? null}
+                previewLoading={preview?.loading ?? true}
+                editing={editingId === project.id}
+                nameDraft={nameDraft}
+                onNameDraftChange={setNameDraft}
+                onStartRename={() => {
+                  setEditingId(project.id);
+                  setNameDraft(project.name);
+                }}
+                onCommitRename={() => {
+                  void renameAnyProject(project.id, nameDraft);
+                  setEditingId(null);
+                }}
+                onCancelRename={() => setEditingId(null)}
+                onOpen={() => openProject(project.id)}
+                onDelete={() => {
+                  void removeProject(project.id).then(() =>
+                    setProjects((prev) => prev.filter((p) => p.id !== project.id)),
+                  );
+                }}
+              />
+            );
+          })}
         </ul>
       )}
     </section>
