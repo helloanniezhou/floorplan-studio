@@ -428,13 +428,15 @@ body {
 .editor-column {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .canvas-wrap {
   flex: 1;
-  min-height: 400px;
+  min-height: 0;
   position: relative;
   background: #fafaf9;
   border-bottom: 1px solid #e5e2db;
