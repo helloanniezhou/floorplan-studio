@@ -40,6 +40,28 @@ export function useToolShortcuts(): void {
         return;
       }
 
+      if (e.metaKey || e.ctrlKey) {
+        const key = e.key.toLowerCase();
+        const { selection, copySelection, pasteSelection, cutSelection } =
+          useFloorPlanStore.getState();
+
+        if (key === 'c' && selection) {
+          e.preventDefault();
+          copySelection();
+          return;
+        }
+        if (key === 'v') {
+          e.preventDefault();
+          pasteSelection();
+          return;
+        }
+        if (key === 'x' && selection) {
+          e.preventDefault();
+          cutSelection();
+          return;
+        }
+      }
+
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.repeat) return;
 

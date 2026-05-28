@@ -342,7 +342,7 @@ export function FloorPlanCanvas() {
       if (hit) {
         const wallWorld = walls.find((w) => w.id === hit.wall.id);
         if (wallWorld) {
-          addOpening(wallWorld.id, tool, hit.t * wallLength(wallWorld));
+          addOpening(wallWorld.id, tool, hit.t * wallLength(wallWorld), undefined, 'end');
         }
       }
       return;

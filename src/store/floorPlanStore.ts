@@ -52,6 +52,12 @@ import {
 import { convertPlanToUnit } from '../lib/units/convert';
 import { setWallLength, wallLength } from '../lib/geometry/vectors';
 import { MAX_UNDO_STACK, takeSnapshot, type HistorySnapshot } from './history';
+import {
+  buildClipboardFromSelection,
+  DEFAULT_PASTE_OFFSET,
+  getPlanClipboard,
+  setPlanClipboard,
+} from '../lib/clipboard/planClipboard';
 import type {
   WorkerTraceRequest,
   WorkerTraceResponse,
@@ -95,6 +101,9 @@ type FloorPlanState = FloorPlan & {
   selectAllWalls: () => void;
   deleteSelectedWalls: () => void;
   deleteSelection: () => void;
+  copySelection: () => void;
+  pasteSelection: () => void;
+  cutSelection: () => void;
   setGridEnabled: (enabled: boolean) => void;
   setPendingLength: (value: string) => void;
   setTraceParams: (params: Partial<TraceParams>) => void;
@@ -135,8 +144,9 @@ type FloorPlanState = FloorPlan & {
   addOpening: (
     wallId: string,
     type: Opening['type'],
-    offset: number,
+    positionAlongWall: number,
     width?: number,
+    placement?: 'start' | 'end',
   ) => string;
   updateOpening: (id: string, patch: Partial<Opening>) => void;
   deleteOpening: (id: string) => void;
@@ -382,6 +392,108 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     }
   },
 
+  copySelection: () => {
+    const state = get();
+    const payload = buildClipboardFromSelection(state);
+    if (payload) setPlanClipboard(payload);
+  },
+
+  pasteSelection: () => {
+    const clip = getPlanClipboard();
+    if (!clip) return;
+
+    const offset = DEFAULT_PASTE_OFFSET;
+    get().recordHistory();
+
+    switch (clip.type) {
+      case 'walls': {
+        const idMap = new Map<string, string>();
+        const newWalls = clip.walls.map((w) => {
+          const id = uuidv4();
+          idMap.set(w.id, id);
+          return {
+            ...w,
+            id,
+            start: { x: w.start.x + offset.x, y: w.start.y + offset.y },
+            end: { x: w.end.x + offset.x, y: w.end.y + offset.y },
+          };
+        });
+        const newOpenings = clip.openings
+          .map((o) => {
+            const wallId = idMap.get(o.wallId);
+            if (!wallId) return null;
+            return { ...o, id: uuidv4(), wallId };
+          })
+          .filter((o): o is Opening => o !== null);
+        const newIds = newWalls.map((w) => w.id);
+        set({
+          walls: [...get().walls, ...newWalls],
+          openings: [...get().openings, ...newOpenings],
+          selection: newIds.length > 0 ? { type: 'walls', ids: newIds } : null,
+        });
+        break;
+      }
+      case 'opening': {
+        const wall = get().walls.find((w) => w.id === clip.opening.wallId);
+        if (!wall) break;
+        const len = wallLength(wall);
+        const width = clip.opening.width;
+        const nudgeAlongWall = 0.5;
+        let nextOffset = clip.opening.offset + nudgeAlongWall;
+        if (nextOffset + width > len) {
+          nextOffset = Math.max(0, len - width);
+        }
+        const opening: Opening = {
+          ...clip.opening,
+          id: uuidv4(),
+          offset: nextOffset,
+        };
+        const clamped = clampOpeningOnWall(opening, len);
+        const placed = { ...opening, offset: clamped.offset, width: clamped.width };
+        set({
+          openings: [...get().openings, placed],
+          selection: { type: 'opening', id: placed.id },
+        });
+        break;
+      }
+      case 'furniture': {
+        const item: Furniture = {
+          ...clip.item,
+          id: uuidv4(),
+          position: {
+            x: clip.item.position.x + offset.x,
+            y: clip.item.position.y + offset.y,
+          },
+        };
+        set({
+          furniture: [...get().furniture, item],
+          selection: { type: 'furniture', id: item.id },
+        });
+        break;
+      }
+      case 'landscape': {
+        const item: LandscapeElement = {
+          ...clip.item,
+          id: uuidv4(),
+          position: {
+            x: clip.item.position.x + offset.x,
+            y: clip.item.position.y + offset.y,
+          },
+        };
+        set({
+          landscape: [...get().landscape, item],
+          selection: { type: 'landscape', id: item.id },
+        });
+        break;
+      }
+    }
+  },
+
+  cutSelection: () => {
+    get().copySelection();
+    get().deleteSelection();
+  },
+
   setGridEnabled: (gridEnabled) => set({ gridEnabled }),
   setPendingLength: (pendingLength) => set({ pendingLength }),
   setTraceParams: (params) =>
@@ -609,14 +721,16 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     });
   },
 
-  addOpening: (wallId, type, offset, width) => {
+  addOpening: (wallId, type, positionAlongWall, width, placement = 'start') => {
     const wall = get().walls.find((w) => w.id === wallId);
     if (!wall) return '';
 
     const { unit } = get();
     const w = width ?? defaultOpeningWidth(type, unit);
     const len = wallLength(wall);
-    const clamped = clampOpeningOnWall({ offset, width: w }, len);
+    const rawOffset =
+      placement === 'end' ? positionAlongWall - w : positionAlongWall;
+    const clamped = clampOpeningOnWall({ offset: rawOffset, width: w }, len);
 
     get().recordHistory();
 
