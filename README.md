@@ -52,18 +52,22 @@ On Vercel, add the same `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` 
 
 ### 2. Create the database table (required once)
 
-**Option A — SQL Editor (recommended)**
-
-1. Open [SQL Editor → New query](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/sql/new)
-2. Paste the contents of [`supabase/setup.sql`](supabase/setup.sql)
-3. Click **Run**
-
-**Option B — CLI script**
+**Option A — Supabase CLI (recommended)**
 
 ```bash
-# Personal access token: https://supabase.com/dashboard/account/tokens
-SUPABASE_ACCESS_TOKEN=your_token npm run db:setup
+# One-time: https://supabase.com/dashboard/account/tokens
+export SUPABASE_ACCESS_TOKEN=your_token
+# Or: npx supabase login
+
+npx supabase link --project-ref zqktwmikwmaicooawquc
+npm run db:push
 ```
+
+`db:push` applies migrations from `supabase/migrations/` (including `projects` table + RLS).
+
+**Option B — SQL Editor**
+
+Paste [`supabase/setup.sql`](supabase/setup.sql) into [SQL Editor](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/sql/new) and run.
 
 ### 3. Auth
 
