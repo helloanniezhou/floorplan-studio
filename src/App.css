@@ -30,6 +30,11 @@ body {
   overflow: hidden;
 }
 
+.app--projects-only {
+  display: block;
+  grid-template-columns: none;
+}
+
 .app:has(.property-panel--minimized) {
   grid-template-columns: minmax(220px, 260px) 1fr 44px;
 }
@@ -393,6 +398,10 @@ body {
   height: 100%;
   overflow-y: auto;
   padding: 5.2rem 1rem 1rem;
+}
+
+.projects-page--standalone {
+  padding-top: 1rem;
 }
 
 .projects-header {

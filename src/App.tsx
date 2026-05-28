@@ -17,6 +17,14 @@ function App() {
   const [projectsView, setProjectsView] = useState(false);
   const show3DPreview = useFloorPlanStore((s) => s.show3DPreview);
 
+  if (projectsView) {
+    return (
+      <div className="app app--projects-only">
+        <ProjectsPage onBack={() => setProjectsView(false)} standalone />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <Toolbar />
@@ -28,9 +36,7 @@ function App() {
               onToggleProjectsView={() => setProjectsView((prev) => !prev)}
             />
           </div>
-          {projectsView ? (
-            <ProjectsPage onBack={() => setProjectsView(false)} />
-          ) : show3DPreview ? (
+          {show3DPreview ? (
             <Viewport3D />
           ) : (
             <div className="editor-column">

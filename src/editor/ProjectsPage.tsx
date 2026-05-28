@@ -12,7 +12,13 @@ function formatDate(ts: number): string {
   });
 }
 
-export function ProjectsPage({ onBack }: { onBack: () => void }) {
+export function ProjectsPage({
+  onBack,
+  standalone = false,
+}: {
+  onBack: () => void;
+  standalone?: boolean;
+}) {
   const {
     cloudMode,
     user,
@@ -47,7 +53,7 @@ export function ProjectsPage({ onBack }: { onBack: () => void }) {
 
   if (!cloudMode) {
     return (
-      <section className="projects-page">
+      <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
         <header className="projects-header">
           <h2>Projects</h2>
           <button type="button" className="action-bar-btn" onClick={onBack}>
@@ -65,7 +71,7 @@ export function ProjectsPage({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <section className="projects-page">
+    <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
       <header className="projects-header">
         <div>
           <h2>Projects</h2>
