@@ -28,11 +28,27 @@ export function ProjectsPage({
     removeProject,
     renameAnyProject,
     createNewProject,
+    importLocalBrowserProjects,
   } = useProjectPersistence();
   const [projects, setProjects] = useState<SavedProjectMeta[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState('');
+
+  const refreshProjects = () => {
+    setLoading(true);
+    setListError(null);
+    return fetchProjectList()
+      .then(setProjects)
+      .catch((err: unknown) => {
+        setProjects([]);
+        setListError(err instanceof Error ? err.message : 'Could not load cloud projects.');
+      })
+      .finally(() => setLoading(false));
+  };
 
   const userLabel = useMemo(
     () => user?.email ?? user?.user_metadata?.full_name ?? 'Signed in account',
@@ -45,10 +61,7 @@ export function ProjectsPage({
       setLoading(false);
       return;
     }
-    setLoading(true);
-    void fetchProjectList()
-      .then(setProjects)
-      .finally(() => setLoading(false));
+    void refreshProjects();
   }, [cloudMode, fetchProjectList]);
 
   if (!cloudMode) {
@@ -87,8 +100,43 @@ export function ProjectsPage({
         </div>
       </header>
       {loading && <p className="muted">Loading projects…</p>}
+      {listError && <p className="project-status error">{listError}</p>}
+      {importMessage && <p className="muted">{importMessage}</p>}
       {!loading && projects.length === 0 && (
-        <p className="muted">No projects yet for this account. Create a new project to get started.</p>
+        <div className="projects-empty">
+          <p className="muted">
+            No cloud projects yet for this account. If you designed a plan before signing in, import it
+            from this browser.
+          </p>
+          <button
+            type="button"
+            className="action-bar-btn primary"
+            disabled={importing}
+            onClick={() => {
+              setImporting(true);
+              setImportMessage(null);
+              void importLocalBrowserProjects()
+                .then(({ imported, localCount }) => {
+                  if (imported === 0 && localCount === 0) {
+                    setImportMessage(
+                      'No local projects found in this browser. Try the same browser/profile you used before, or open http://localhost:5173 (not 127.0.0.1) if that is where you edited.',
+                    );
+                  } else {
+                    setImportMessage(`Imported ${imported} project(s) from this browser.`);
+                  }
+                  return refreshProjects();
+                })
+                .catch((err: unknown) => {
+                  setImportMessage(
+                    err instanceof Error ? err.message : 'Import failed. Check Supabase table and RLS.',
+                  );
+                })
+                .finally(() => setImporting(false));
+            }}
+          >
+            {importing ? 'Importing…' : 'Import from this browser'}
+          </button>
+        </div>
       )}
       {!loading && projects.length > 0 && (
         <ul className="projects-grid">

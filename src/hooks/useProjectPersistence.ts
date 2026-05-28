@@ -7,13 +7,16 @@ import {
   deleteProject,
   getLastProjectId,
   getProject,
-  listFullProjects,
   listProjects,
   migrateLegacyLocalStorage,
   saveProject,
   type SavedProject,
   type SavedProjectMeta,
 } from '../lib/storage/projectStorage';
+import {
+  collectLocalBrowserProjects,
+  hasMeaningfulPlan,
+} from '../lib/storage/localProjectImport';
 import {
   deleteSupabaseProject,
   getSupabaseProject,
@@ -23,6 +26,14 @@ import {
 
 const AUTOSAVE_MS = 1500;
 const CLOUD_MIGRATED_KEY_PREFIX = 'floorplan-studio:cloudMigrated:';
+
+function cloudMigratedKey(userId: string): string {
+  return `${CLOUD_MIGRATED_KEY_PREFIX}${userId}`;
+}
+
+export function clearCloudMigrationMarker(userId: string): void {
+  localStorage.removeItem(cloudMigratedKey(userId));
+}
 
 function planFingerprint(plan: FloorPlan): string {
   return JSON.stringify({
@@ -57,22 +68,68 @@ export function useProjectPersistence() {
   const savingRef = useRef(false);
   const cloudMode = auth.enabled && Boolean(auth.user);
 
-  const ensureLocalProjectsMigratedToCloud = useCallback(async () => {
-    if (!auth.user) return;
-    const markerKey = `${CLOUD_MIGRATED_KEY_PREFIX}${auth.user.id}`;
-    if (localStorage.getItem(markerKey) === '1') return;
+  const collectLocalProjects = useCallback(async () => {
+    const state = useFloorPlanStore.getState();
+    return collectLocalBrowserProjects({
+      id: state.projectId,
+      name: state.projectName,
+      exportPlan: () => state.exportPlan(),
+      wallCount: state.walls.length,
+    });
+  }, []);
 
-    const localProjects = await listFullProjects();
-    if (localProjects.length === 0) {
+  const ensureLocalProjectsMigratedToCloud = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!auth.user) return { imported: 0, localCount: 0 };
+
+      const userId = auth.user.id;
+      const markerKey = cloudMigratedKey(userId);
+      const localProjects = await collectLocalProjects();
+      const localCount = localProjects.length;
+
+      if (localCount === 0) {
+        return { imported: 0, localCount: 0 };
+      }
+
+      let cloudProjects: SavedProjectMeta[] = [];
+      try {
+        cloudProjects = await listSupabaseProjects(userId);
+      } catch {
+        // Table/RLS issues — still attempt upload below.
+      }
+
+      const markerSet = localStorage.getItem(markerKey) === '1';
+      const cloudMissingLocal = localProjects.some(
+        (local) => !cloudProjects.some((cloud) => cloud.id === local.id),
+      );
+      const shouldUpload =
+        options?.force === true ||
+        cloudProjects.length === 0 ||
+        cloudMissingLocal ||
+        !markerSet;
+
+      if (!shouldUpload) {
+        return { imported: 0, localCount };
+      }
+
+      let imported = 0;
+      for (const project of localProjects) {
+        await saveSupabaseProject(userId, project);
+        imported += 1;
+      }
       localStorage.setItem(markerKey, '1');
-      return;
-    }
+      return { imported, localCount };
+    },
+    [auth.user, collectLocalProjects],
+  );
 
-    for (const project of localProjects) {
-      await saveSupabaseProject(auth.user.id, project);
+  const importLocalBrowserProjects = useCallback(async () => {
+    if (!auth.user) {
+      throw new Error('Sign in to import browser projects to your account.');
     }
-    localStorage.setItem(markerKey, '1');
-  }, [auth.user]);
+    clearCloudMigrationMarker(auth.user.id);
+    return ensureLocalProjectsMigratedToCloud({ force: true });
+  }, [auth.user, ensureLocalProjectsMigratedToCloud]);
 
   const backend = useMemo(
     () => ({
@@ -181,6 +238,20 @@ export function useProjectPersistence() {
         }
       }
 
+      if (!project && cloudMode) {
+        const localFallback = await collectLocalProjects();
+        if (localFallback.length > 0) {
+          project = localFallback[0];
+          if (auth.user) {
+            try {
+              await saveSupabaseProject(auth.user.id, project);
+            } catch {
+              // Still open from local data even if cloud write fails.
+            }
+          }
+        }
+      }
+
       if (cancelled) return;
 
       if (project) {
@@ -195,15 +266,37 @@ export function useProjectPersistence() {
         });
         lastSavedFingerprint.current = planFingerprint(project.plan);
       } else {
-        const id = uuidv4();
-        useFloorPlanStore.setState({
-          projectId: id,
-          projectName: 'Untitled plan',
-          storageReady: true,
-          saveStatus: 'saved',
-        });
-        lastSavedFingerprint.current = planFingerprint(useFloorPlanStore.getState().exportPlan());
-        await persistCurrent('Untitled plan');
+        const localOnly = await collectLocalProjects();
+        const meaningful = localOnly.find((p) => hasMeaningfulPlan(p.plan));
+        if (meaningful) {
+          useFloorPlanStore.getState().importPlan(meaningful.plan, { recordHistory: false });
+          useFloorPlanStore.setState({
+            projectId: meaningful.id,
+            projectName: meaningful.name,
+            storageReady: true,
+            saveStatus: 'saved',
+            undoStack: [],
+            redoStack: [],
+          });
+          lastSavedFingerprint.current = planFingerprint(meaningful.plan);
+          if (cloudMode && auth.user) {
+            try {
+              await saveSupabaseProject(auth.user.id, meaningful);
+            } catch {
+              useFloorPlanStore.setState({ saveStatus: 'error' });
+            }
+          }
+        } else {
+          const id = uuidv4();
+          useFloorPlanStore.setState({
+            projectId: id,
+            projectName: 'Untitled plan',
+            storageReady: true,
+            saveStatus: 'saved',
+          });
+          lastSavedFingerprint.current = planFingerprint(useFloorPlanStore.getState().exportPlan());
+          await persistCurrent('Untitled plan');
+        }
       }
     }
 
@@ -218,6 +311,7 @@ export function useProjectPersistence() {
     backend,
     cloudMode,
     ensureLocalProjectsMigratedToCloud,
+    collectLocalProjects,
     persistCurrent,
   ]);
 
@@ -405,5 +499,6 @@ export function useProjectPersistence() {
     removeProject,
     renameAnyProject,
     fetchProjectList,
+    importLocalBrowserProjects,
   };
 }
