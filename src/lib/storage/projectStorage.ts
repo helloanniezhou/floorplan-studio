@@ -57,6 +57,18 @@ export async function listProjects(): Promise<SavedProjectMeta[]> {
   }
 }
 
+export async function listFullProjects(): Promise<SavedProject[]> {
+  const db = await openDatabase();
+  try {
+    const tx = db.transaction(STORE, 'readonly');
+    const store = tx.objectStore(STORE);
+    const all = await requestToPromise(store.getAll() as IDBRequest<SavedProject[]>);
+    return all.sort((a, b) => b.updatedAt - a.updatedAt);
+  } finally {
+    db.close();
+  }
+}
+
 export async function getProject(id: string): Promise<SavedProject | undefined> {
   const db = await openDatabase();
   try {

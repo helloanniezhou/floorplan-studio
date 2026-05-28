@@ -7,6 +7,7 @@ import {
   deleteProject,
   getLastProjectId,
   getProject,
+  listFullProjects,
   listProjects,
   migrateLegacyLocalStorage,
   saveProject,
@@ -21,6 +22,7 @@ import {
 } from '../lib/storage/supabaseProjectStorage';
 
 const AUTOSAVE_MS = 1500;
+const CLOUD_MIGRATED_KEY_PREFIX = 'floorplan-studio:cloudMigrated:';
 
 function planFingerprint(plan: FloorPlan): string {
   return JSON.stringify({
@@ -54,6 +56,23 @@ export function useProjectPersistence() {
   const lastSavedFingerprint = useRef<string | null>(null);
   const savingRef = useRef(false);
   const cloudMode = auth.enabled && Boolean(auth.user);
+
+  const ensureLocalProjectsMigratedToCloud = useCallback(async () => {
+    if (!auth.user) return;
+    const markerKey = `${CLOUD_MIGRATED_KEY_PREFIX}${auth.user.id}`;
+    if (localStorage.getItem(markerKey) === '1') return;
+
+    const localProjects = await listFullProjects();
+    if (localProjects.length === 0) {
+      localStorage.setItem(markerKey, '1');
+      return;
+    }
+
+    for (const project of localProjects) {
+      await saveSupabaseProject(auth.user.id, project);
+    }
+    localStorage.setItem(markerKey, '1');
+  }, [auth.user]);
 
   const backend = useMemo(
     () => ({
@@ -137,6 +156,11 @@ export function useProjectPersistence() {
         return;
       }
 
+      if (cloudMode) {
+        await ensureLocalProjectsMigratedToCloud();
+        if (cancelled) return;
+      }
+
       let project: SavedProject | null | undefined = null;
       if (!cloudMode) {
         const migrated = await migrateLegacyLocalStorage();
@@ -187,7 +211,15 @@ export function useProjectPersistence() {
     return () => {
       cancelled = true;
     };
-  }, [auth.enabled, auth.loading, auth.user, backend, cloudMode, persistCurrent]);
+  }, [
+    auth.enabled,
+    auth.loading,
+    auth.user,
+    backend,
+    cloudMode,
+    ensureLocalProjectsMigratedToCloud,
+    persistCurrent,
+  ]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -250,7 +282,7 @@ export function useProjectPersistence() {
       useFloorPlanStore.setState({ saveStatus: 'saving' });
       savingRef.current = true;
       try {
-      await backend.save(project);
+        await backend.save(project);
         lastSavedFingerprint.current = planFingerprint(plan);
         useFloorPlanStore.setState({
           projectId: id,
