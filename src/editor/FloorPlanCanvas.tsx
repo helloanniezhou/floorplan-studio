@@ -1062,10 +1062,6 @@ export function FloorPlanCanvas() {
           { kind: 'placeable' }
         >;
         const rawCenter = subtract(world, activeDrag.grabOffset);
-        const item =
-          activeDrag.type === 'furniture'
-            ? furniture.find((f) => f.id === activeDrag.id)
-            : landscape.find((l) => l.id === activeDrag.id);
         // Snap only on release — wall snap is O(walls × corners) and can block the drag loop.
         const nextPosition = rawCenter;
 
