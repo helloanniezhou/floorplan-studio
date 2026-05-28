@@ -18,8 +18,10 @@ function App() {
     <div className="app">
       <Toolbar />
       <div className="main-column">
-        <ActionBar />
         <main className="workspace">
+          <div className="workspace-overlay">
+            <ActionBar />
+          </div>
           {show3DPreview ? (
             <Viewport3D />
           ) : (
