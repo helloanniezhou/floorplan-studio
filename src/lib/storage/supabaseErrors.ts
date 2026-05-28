@@ -13,8 +13,13 @@ export function formatSupabaseError(error: unknown): string {
   const err = error as SupabaseLikeError;
   const message = err.message ?? 'Could not save to cloud.';
 
-  if (err.code === '42P01' || message.includes('relation') && message.includes('does not exist')) {
-    return 'Supabase table missing. Run supabase/schema.sql in your project.';
+  if (
+    err.code === '42P01' ||
+    err.code === 'PGRST205' ||
+    (message.includes('relation') && message.includes('does not exist')) ||
+    message.includes("Could not find the table 'public.projects'")
+  ) {
+    return 'Cloud database not set up. Run supabase/setup.sql in the Supabase SQL Editor (see README).';
   }
   if (err.code === '42501' || message.toLowerCase().includes('row-level security')) {
     return 'Permission denied. Sign out and sign in again, or check RLS policies.';

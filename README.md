@@ -38,45 +38,38 @@ Uploaded plan images are hidden by default. Turn on *Show image* in the action b
 
 ## Supabase setup (Google OAuth + cloud projects)
 
-Create a Supabase project and configure these Vite env vars:
+Cloud save requires the `public.projects` table. If save shows **Save failed** or mentions the table is missing, run the database setup below.
+
+### 1. Environment variables
+
+Copy `.env.example` to `.env` and set keys from [Supabase → Project Settings → API](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/settings/api):
 
 ```bash
-VITE_SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
-VITE_SUPABASE_ANON_KEY=YOUR-ANON-KEY
+cp .env.example .env
 ```
 
-Then create the `projects` table in Supabase SQL editor:
+On Vercel, add the same `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` (or legacy anon key) under **Environment Variables**.
 
-```sql
-create table if not exists public.projects (
-  id uuid primary key,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  name text not null,
-  updated_at timestamptz not null default now(),
-  plan_json jsonb not null
-);
+### 2. Create the database table (required once)
 
-alter table public.projects enable row level security;
+**Option A — SQL Editor (recommended)**
 
-create policy "users can read own projects"
-on public.projects for select
-using (auth.uid() = user_id);
+1. Open [SQL Editor → New query](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/sql/new)
+2. Paste the contents of [`supabase/setup.sql`](supabase/setup.sql)
+3. Click **Run**
 
-create policy "users can insert own projects"
-on public.projects for insert
-with check (auth.uid() = user_id);
+**Option B — CLI script**
 
-create policy "users can update own projects"
-on public.projects for update
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
-
-create policy "users can delete own projects"
-on public.projects for delete
-using (auth.uid() = user_id);
+```bash
+# Personal access token: https://supabase.com/dashboard/account/tokens
+SUPABASE_ACCESS_TOKEN=your_token npm run db:setup
 ```
 
-In Supabase Auth settings, enable **Google** provider and add your Vercel URL as an allowed redirect URL.
+### 3. Auth
+
+In [Auth → Providers](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/auth/providers), enable **Google** and add your site URL (e.g. `http://localhost:5173` and your Vercel URL) under **Redirect URLs**.
+
+When signed in, plans autosave to Supabase. When signed out, plans stay in the browser (IndexedDB).
 
 ## Stack
 

@@ -1,5 +1,4 @@
--- Run once in Supabase Dashboard → SQL Editor → New query → Run
--- Fixes: POST /rest/v1/projects 404 (Not Found)
+-- Cloud project storage for Floor Plan Studio
 
 create table if not exists public.projects (
   id uuid primary key,
@@ -42,5 +41,4 @@ create policy "users can delete own projects"
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on table public.projects to authenticated;
 
--- Refresh API schema cache (Supabase usually picks this up automatically)
 notify pgrst, 'reload schema';
