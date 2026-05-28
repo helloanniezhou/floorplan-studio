@@ -117,6 +117,26 @@ body {
   margin-left: auto;
 }
 
+.action-bar-plan {
+  flex-shrink: 0;
+  padding-left: 0.5rem;
+  border-left: 1px solid #e5e2db;
+}
+
+.action-bar-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: #444;
+  cursor: pointer;
+  user-select: none;
+}
+
+.action-bar-checkbox input {
+  margin: 0;
+}
+
 .toolbar {
   background: #fff;
   border-right: 1px solid #e5e2db;

@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
 import type { FurnitureKind, LandscapeKind } from '../types/floorPlan';
 import {
@@ -45,29 +44,8 @@ const LANDSCAPE_ITEMS: { kind: LandscapeKind; icon: string }[] = [
 export function Toolbar() {
   const tool = useFloorPlanStore((s) => s.tool);
   const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
-  const backgroundImage = useFloorPlanStore((s) => s.backgroundImage);
-  const backgroundVisible = useFloorPlanStore((s) => s.backgroundVisible);
-  const setBackgroundVisible = useFloorPlanStore((s) => s.setBackgroundVisible);
   const setTool = useFloorPlanStore((s) => s.setTool);
   const startPlace = useFloorPlanStore((s) => s.startPlace);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const img = new Image();
-      img.onload = () => {
-        useFloorPlanStore.getState().setBackgroundImage(dataUrl, img.width, img.height);
-        useFloorPlanStore.getState().setTool('scale');
-      };
-      img.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
 
   const placeActive =
     tool === 'place' &&
@@ -83,33 +61,6 @@ export function Toolbar() {
       <h1 className="toolbar-title">Floor Plan Studio</h1>
 
       <div className="toolbar-scroll">
-        <CollapsibleToolbarSection id="project" title="Project" defaultOpen>
-          <button
-            type="button"
-            className="toolbar-btn primary"
-            onClick={() => fileRef.current?.click()}
-          >
-            Upload plan
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={handleUpload}
-          />
-          {backgroundImage && (
-            <label className="field row toolbar-toggle">
-              <input
-                type="checkbox"
-                checked={backgroundVisible}
-                onChange={(e) => setBackgroundVisible(e.target.checked)}
-              />
-              <span>Show uploaded image</span>
-            </label>
-          )}
-        </CollapsibleToolbarSection>
-
         <CollapsibleToolbarSection id="tools" title="Tools" defaultOpen>
           {DRAWING_TOOLS.map((t) => {
             const shortcut = TOOL_SHORTCUT_LABELS[t.id];
