@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Toolbar } from './editor/Toolbar';
 import { ActionBar } from './editor/ActionBar';
 import { PropertyPanel } from './editor/PropertyPanel';
@@ -9,6 +9,7 @@ import { Viewport3D } from './viewer/Viewport3D';
 import { useFloorPlanStore } from './store/floorPlanStore';
 import { useToolShortcuts } from './editor/useToolShortcuts';
 import { useProjectPersistence } from './hooks/useProjectPersistence';
+import { supabase } from './utils/supabase';
 import './App.css';
 
 function App() {
@@ -16,6 +17,12 @@ function App() {
   useProjectPersistence();
   const [projectsView, setProjectsView] = useState(false);
   const show3DPreview = useFloorPlanStore((s) => s.show3DPreview);
+
+  useEffect(() => {
+    if (!supabase) return;
+    // Lightweight connectivity check for local Supabase setup.
+    void supabase.from('projects').select('id', { count: 'exact', head: true });
+  }, []);
 
   if (projectsView) {
     return (
