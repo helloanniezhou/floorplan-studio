@@ -17,6 +17,8 @@ export function ProjectsPage({
   standalone?: boolean;
 }) {
   const {
+    authEnabled,
+    authLoading,
     cloudMode,
     user,
     signInWithGoogle,
@@ -56,6 +58,10 @@ export function ProjectsPage({
   );
 
   useEffect(() => {
+    if (authEnabled && authLoading) {
+      setLoading(true);
+      return;
+    }
     if (!cloudMode) {
       setProjects([]);
       setPreviews({});
@@ -63,7 +69,7 @@ export function ProjectsPage({
       return;
     }
     void refreshProjects();
-  }, [cloudMode, fetchProjectList]);
+  }, [authEnabled, authLoading, cloudMode, user?.id, fetchProjectList]);
 
   useEffect(() => {
     if (!cloudMode || projects.length === 0) return;
@@ -102,6 +108,17 @@ export function ProjectsPage({
     void loadProject(id).then(() => onProjectOpened());
   };
 
+  if (authEnabled && authLoading) {
+    return (
+      <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
+        <header className="projects-header">
+          <h2>Projects</h2>
+        </header>
+        <p className="muted">Checking login…</p>
+      </section>
+    );
+  }
+
   if (!cloudMode) {
     return (
       <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
@@ -110,6 +127,12 @@ export function ProjectsPage({
         </header>
         <div className="projects-empty">
           <p>Sign in with Google to manage projects for your account in Supabase.</p>
+          {!authEnabled && (
+            <p className="muted">
+              Supabase is not configured in this build. Add <code>VITE_SUPABASE_URL</code> and{' '}
+              <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to your <code>.env</code> file.
+            </p>
+          )}
           <button type="button" className="action-bar-btn primary" onClick={() => void signInWithGoogle()}>
             Continue with Google
           </button>
@@ -143,7 +166,12 @@ export function ProjectsPage({
         </div>
       </header>
       {loading && <p className="muted">Loading projects…</p>}
-      {listError && <p className="project-status error">{listError}</p>}
+      {listError && (
+        <p className="project-status error">
+          {listError} Try <strong>Import from this browser</strong> below if your plans were saved
+          locally.
+        </p>
+      )}
       {importMessage && <p className="muted">{importMessage}</p>}
       {!loading && projects.length === 0 && (
         <div className="projects-empty">

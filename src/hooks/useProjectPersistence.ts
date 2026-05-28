@@ -24,6 +24,7 @@ import {
   saveSupabaseProject,
 } from '../lib/storage/supabaseProjectStorage';
 import { CloudSyncError } from '../lib/storage/supabaseErrors';
+import { mergeProjectMetaLists } from '../lib/storage/mergeProjectLists';
 
 const AUTOSAVE_MS = 1500;
 const CLOUD_MIGRATED_KEY_PREFIX = 'floorplan-studio:cloudMigrated:';
@@ -136,11 +137,24 @@ export function useProjectPersistence() {
   const backend = useMemo(
     () => ({
       list: async (): Promise<SavedProjectMeta[]> => {
-        if (cloudMode && auth.user) return listSupabaseProjects(auth.user.id);
-        return listProjects();
+        const local = (await collectLocalBrowserProjects()).map((p) => ({
+          id: p.id,
+          name: p.name,
+          updatedAt: p.updatedAt,
+        }));
+        if (!cloudMode || !auth.user) {
+          return local.length > 0 ? local : listProjects();
+        }
+        await ensureLocalProjectsMigratedToCloud();
+        const cloud = await listSupabaseProjects(auth.user.id);
+        return mergeProjectMetaLists(cloud, local);
       },
       get: async (id: string): Promise<SavedProject | undefined> => {
-        if (cloudMode && auth.user) return getSupabaseProject(auth.user.id, id);
+        if (cloudMode && auth.user) {
+          const cloud = await getSupabaseProject(auth.user.id, id);
+          if (cloud) return cloud;
+          return getProject(id);
+        }
         return getProject(id);
       },
       save: async (project: SavedProject): Promise<void> => {
@@ -153,13 +167,16 @@ export function useProjectPersistence() {
       },
       remove: async (id: string): Promise<void> => {
         if (cloudMode && auth.user) {
-          await deleteSupabaseProject(auth.user.id, id);
-          return;
+          try {
+            await deleteSupabaseProject(auth.user.id, id);
+          } catch {
+            // Still remove local copy below.
+          }
         }
         await deleteProject(id);
       },
     }),
-    [auth.user, cloudMode],
+    [auth.user, cloudMode, ensureLocalProjectsMigratedToCloud, collectLocalProjects],
   );
 
   const persistCurrent = useCallback(async (nameOverride?: string) => {
@@ -492,8 +509,19 @@ export function useProjectPersistence() {
   );
 
   const fetchProjectList = useCallback(async (): Promise<SavedProjectMeta[]> => {
-    return backend.list();
-  }, [backend]);
+    try {
+      return await backend.list();
+    } catch (err) {
+      if (!cloudMode || !auth.user) throw err;
+      const local = (await collectLocalBrowserProjects()).map((p) => ({
+        id: p.id,
+        name: p.name,
+        updatedAt: p.updatedAt,
+      }));
+      if (local.length > 0) return local;
+      throw err;
+    }
+  }, [backend, cloudMode, auth.user, collectLocalProjects]);
 
   const getProjectById = useCallback(
     async (id: string): Promise<SavedProject | undefined> => backend.get(id),

@@ -24,12 +24,11 @@ function assertSupabase() {
   }
 }
 
-export async function listSupabaseProjects(userId: string): Promise<SavedProjectMeta[]> {
+export async function listSupabaseProjects(_userId: string): Promise<SavedProjectMeta[]> {
   assertSupabase();
   const { data, error } = await supabase!
     .from('projects')
     .select('id,name,updated_at')
-    .eq('user_id', userId)
     .order('updated_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row: { id: string; name: string; updated_at: string }) => ({
