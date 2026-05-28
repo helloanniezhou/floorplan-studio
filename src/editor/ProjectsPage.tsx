@@ -91,7 +91,13 @@ export function ProjectsPage({
           <p className="muted">Account: {userLabel}</p>
         </div>
         <div className="projects-header-actions">
-          <button type="button" className="action-bar-btn" onClick={() => void createNewProject()}>
+          <button
+            type="button"
+            className="action-bar-btn"
+            onClick={() => {
+              void createNewProject().then(() => onBack());
+            }}
+          >
             New project
           </button>
           <button type="button" className="action-bar-btn" onClick={onBack}>
