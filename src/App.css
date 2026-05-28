@@ -624,6 +624,39 @@ body {
   pointer-events: auto;
 }
 
+.workspace-top-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  pointer-events: none;
+  max-width: 100%;
+}
+
+.workspace-top-stack .action-bar,
+.workspace-top-stack .scale-banner {
+  pointer-events: auto;
+}
+
+.workspace-top-stack .scale-banner {
+  border: 1px solid #e5e2db;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 8%);
+}
+
+.workspace-top-stack .scale-banner.ok {
+  border-color: #a7f3d0;
+}
+
+.workspace-top-stack .scale-banner.active {
+  border-color: #bfdbfe;
+}
+
+.workspace:has(.workspace-top-stack) .editor-column {
+  /* Room for floating action bar + scale tip */
+  padding-top: 7.75rem;
+}
+
 .editor-column {
   display: flex;
   flex-direction: column;
@@ -696,6 +729,7 @@ body {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .scale-banner.ok {

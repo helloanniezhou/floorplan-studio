@@ -38,16 +38,18 @@ function App() {
       <div className="main-column">
         <main className="workspace">
           <div className="workspace-overlay">
-            <ActionBar
-              projectsView={projectsView}
-              onToggleProjectsView={() => setProjectsView((prev) => !prev)}
-            />
+            <div className="workspace-top-stack">
+              <ActionBar
+                projectsView={projectsView}
+                onToggleProjectsView={() => setProjectsView((prev) => !prev)}
+              />
+              {!show3DPreview && <ScaleDialog />}
+            </div>
           </div>
           {show3DPreview ? (
             <Viewport3D />
           ) : (
             <div className="editor-column">
-              <ScaleDialog />
               <FloorPlanCanvas />
             </div>
           )}
