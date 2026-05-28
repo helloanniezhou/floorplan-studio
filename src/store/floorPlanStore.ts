@@ -31,6 +31,7 @@ import {
   LANDSCAPE_DEFAULTS,
 } from '../lib/placeables/defaults';
 import { bedDimensionsForSize, DEFAULT_BED_SIZE } from '../lib/placeables/beds';
+import { centerFromCornerAnchor } from '../lib/placeables/geometry';
 import { convertWallsToWorld, clampOpeningOnWall } from '../lib/geometry/units';
 import {
   rectangleFromCorners,
@@ -148,7 +149,11 @@ type FloorPlanState = FloorPlan & {
     width?: number,
     placement?: 'start' | 'end',
   ) => string;
-  updateOpening: (id: string, patch: Partial<Opening>) => void;
+  updateOpening: (
+    id: string,
+    patch: Partial<Opening>,
+    options?: { recordHistory?: boolean },
+  ) => void;
   deleteOpening: (id: string) => void;
 
   addFurniture: (
@@ -754,8 +759,10 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     return opening.id;
   },
 
-  updateOpening: (id, patch) => {
-    get().recordHistory();
+  updateOpening: (id, patch, options) => {
+    if (options?.recordHistory !== false) {
+      get().recordHistory();
+    }
     set({
       openings: get().openings.map((o) => {
         if (o.id !== id) return o;
@@ -858,12 +865,33 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     });
   },
 
-  placeActiveItem: (position) => {
-    const { activePlaceable, addFurniture, addLandscape } = get();
+  placeActiveItem: (clickWorld) => {
+    const { activePlaceable, addFurniture, addLandscape, unit } = get();
+    const rotation = 0;
+
     if (activePlaceable.category === 'furniture') {
-      return addFurniture(activePlaceable.kind, position);
+      const kind = activePlaceable.kind;
+      const defaults =
+        kind === 'bed'
+          ? bedDimensionsForSize(DEFAULT_BED_SIZE, unit)
+          : defaultFurnitureDimensions(kind, unit);
+      const center = centerFromCornerAnchor(
+        clickWorld,
+        defaults.width,
+        defaults.depth,
+        rotation,
+      );
+      return addFurniture(kind, center, undefined, rotation);
     }
-    return addLandscape(activePlaceable.kind, position);
+
+    const defaults = LANDSCAPE_DEFAULTS[activePlaceable.kind];
+    const center = centerFromCornerAnchor(
+      clickWorld,
+      defaults.width,
+      defaults.depth,
+      rotation,
+    );
+    return addLandscape(activePlaceable.kind, center, undefined, rotation);
   },
 
   setSuggestions: (suggestions) => set({ suggestions }),
