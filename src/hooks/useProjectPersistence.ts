@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useSupabaseAuth } from './useSupabaseAuth';
 import { useFloorPlanStore } from '../store/floorPlanStore';
@@ -23,6 +23,7 @@ import {
   listSupabaseProjects,
   saveSupabaseProject,
 } from '../lib/storage/supabaseProjectStorage';
+import { CloudSyncError } from '../lib/storage/supabaseErrors';
 
 const AUTOSAVE_MS = 1500;
 const CLOUD_MIGRATED_KEY_PREFIX = 'floorplan-studio:cloudMigrated:';
@@ -67,6 +68,7 @@ export function useProjectPersistence() {
   const lastSavedFingerprint = useRef<string | null>(null);
   const savingRef = useRef(false);
   const cloudMode = auth.enabled && Boolean(auth.user);
+  const [saveDetail, setSaveDetail] = useState<string | null>(null);
 
   const collectLocalProjects = useCallback(async () => {
     const state = useFloorPlanStore.getState();
@@ -143,6 +145,7 @@ export function useProjectPersistence() {
       },
       save: async (project: SavedProject): Promise<void> => {
         if (cloudMode && auth.user) {
+          await saveProject(project);
           await saveSupabaseProject(auth.user.id, project);
           return;
         }
@@ -181,13 +184,35 @@ export function useProjectPersistence() {
     try {
       await backend.save(project);
       lastSavedFingerprint.current = planFingerprint(plan);
+      setSaveDetail(null);
       useFloorPlanStore.setState({
         projectId: id,
         projectName: name,
         saveStatus: 'saved',
       });
-    } catch {
-      useFloorPlanStore.setState({ saveStatus: 'error' });
+    } catch (err) {
+      const cloudSyncFailed = err instanceof CloudSyncError;
+      if (cloudSyncFailed) {
+        try {
+          await saveProject(project);
+          lastSavedFingerprint.current = planFingerprint(plan);
+          const detail = err.message;
+          setSaveDetail(detail);
+          useFloorPlanStore.setState({
+            projectId: id,
+            projectName: name,
+            saveStatus: 'saved',
+          });
+        } catch {
+          setSaveDetail(err.message);
+          useFloorPlanStore.setState({ saveStatus: 'error' });
+        }
+      } else {
+        const message =
+          err instanceof Error ? err.message : 'Could not save plan in this browser.';
+        setSaveDetail(message);
+        useFloorPlanStore.setState({ saveStatus: 'error' });
+      }
     } finally {
       savingRef.current = false;
     }
@@ -498,6 +523,7 @@ export function useProjectPersistence() {
     projectId,
     projectName,
     saveStatus,
+    saveDetail,
     saveNow,
     saveAs,
     renameProject,

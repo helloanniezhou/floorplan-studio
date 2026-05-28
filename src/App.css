@@ -160,6 +160,10 @@ body {
   color: #b91c1c;
 }
 
+.project-status.warn {
+  color: #b45309;
+}
+
 .auth-controls {
   display: flex;
   align-items: center;

@@ -3,7 +3,10 @@ import { useProjectPersistence } from '../hooks/useProjectPersistence';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { SaveAsDialog } from './SaveAsDialog';
 
-function saveStatusLabel(status: string): string {
+function saveStatusLabel(status: string, detail: string | null): string {
+  if (status === 'saved' && detail) {
+    return 'Saved in browser';
+  }
   switch (status) {
     case 'dirty':
       return 'Unsaved changes';
@@ -27,6 +30,7 @@ export function ProjectControls() {
     projectId,
     projectName,
     saveStatus,
+    saveDetail,
     saveNow,
     saveAs,
     renameProject,
@@ -100,14 +104,21 @@ export function ProjectControls() {
         )}
 
         <span
-          className={`project-status ${saveStatus === 'error' ? 'error' : 'muted'}`}
+          className={`project-status ${
+            saveStatus === 'error'
+              ? 'error'
+              : saveDetail
+                ? 'warn'
+                : 'muted'
+          }`}
           title={
-            cloudMode
-              ? 'Projects are stored in your Supabase account'
-              : 'Plans are stored in this browser (IndexedDB)'
+            saveDetail ??
+            (cloudMode
+              ? 'Projects sync to your Supabase account; a copy is always kept in this browser.'
+              : 'Plans are stored in this browser (IndexedDB)')
           }
         >
-          {saveStatusLabel(saveStatus)}
+          {saveStatusLabel(saveStatus, saveDetail)}
         </span>
 
         <div className="project-actions">
