@@ -16,6 +16,7 @@ import {
   add,
   formatLength,
   pointOnWall,
+  projectPointOnSegment,
   snapAngle,
   subtract,
   wallDirection,
@@ -41,6 +42,7 @@ import { boundsFromWalls } from '../lib/walls3d/miter';
 import { PlanCompassRose } from './PlanCompassRose';
 import { PlanLotBoundary } from './PlanLotBoundary';
 import { EnclosedAreaReadout } from './EnclosedAreaReadout';
+import { findOpeningAtPoint } from '../lib/openings/openingHitTest';
 import { getDoorSymbolGeometry } from '../lib/openings/doorSymbol';
 
 const SNAP_RADIUS = 18;
@@ -107,6 +109,7 @@ export function FloorPlanCanvas() {
   const placeActiveItem = useFloorPlanStore((s) => s.placeActiveItem);
   const updateFurniture = useFloorPlanStore((s) => s.updateFurniture);
   const updateLandscape = useFloorPlanStore((s) => s.updateLandscape);
+  const updateOpening = useFloorPlanStore((s) => s.updateOpening);
   const updateWall = useFloorPlanStore((s) => s.updateWall);
   const recordHistory = useFloorPlanStore((s) => s.recordHistory);
   const acceptSuggestion = useFloorPlanStore((s) => s.acceptSuggestion);
@@ -139,7 +142,8 @@ export function FloorPlanCanvas() {
     | { kind: 'endpoint'; wallId: string; end: 'start' | 'end' }
     | { kind: 'translate'; wallIds: string[]; startWorld: Point }
     | { kind: 'marquee'; startDisplay: Point; currentDisplay: Point }
-    | { kind: 'placeable'; type: 'furniture' | 'landscape'; id: string }
+    | { kind: 'placeable'; type: 'furniture' | 'landscape'; id: string; grabOffset: Point }
+    | { kind: 'opening'; id: string }
   >(null);
 
   const translateSnapshot = useRef<Map<string, { start: Point; end: Point }>>(new Map());
@@ -342,7 +346,7 @@ export function FloorPlanCanvas() {
       if (hit) {
         const wallWorld = walls.find((w) => w.id === hit.wall.id);
         if (wallWorld) {
-          addOpening(wallWorld.id, tool, hit.t * wallLength(wallWorld));
+          addOpening(wallWorld.id, tool, hit.t * wallLength(wallWorld), undefined, 'end');
         }
       }
       return;
@@ -351,12 +355,33 @@ export function FloorPlanCanvas() {
     if (tool === 'select') {
       const placeableHit = getPlaceableAtPoint(world, furniture, landscape);
       if (placeableHit) {
-        setSelection({ type: placeableHit.type, id: placeableHit.id });
-        setDragging({
-          kind: 'placeable',
-          type: placeableHit.type,
-          id: placeableHit.id,
-        });
+        const item =
+          placeableHit.type === 'furniture'
+            ? furniture.find((f) => f.id === placeableHit.id)
+            : landscape.find((l) => l.id === placeableHit.id);
+        if (item) {
+          setSelection({ type: placeableHit.type, id: placeableHit.id });
+          recordHistory();
+          setDragging({
+            kind: 'placeable',
+            type: placeableHit.type,
+            id: placeableHit.id,
+            grabOffset: subtract(world, item.position),
+          });
+        }
+        return;
+      }
+
+      const openingHit = findOpeningAtPoint(
+        world,
+        walls,
+        openings,
+        12 / stageScale / (ppu ?? 1),
+      );
+      if (openingHit) {
+        setSelection({ type: 'opening', id: openingHit.id });
+        recordHistory();
+        setDragging({ kind: 'opening', id: openingHit.id });
         return;
       }
 
@@ -514,11 +539,24 @@ export function FloorPlanCanvas() {
       return;
     }
 
+    if (dragging?.kind === 'opening') {
+      const opening = openings.find((o) => o.id === dragging.id);
+      const wall = opening ? walls.find((w) => w.id === opening.wallId) : undefined;
+      if (opening && wall) {
+        const proj = projectPointOnSegment(world, wall.start, wall.end);
+        const along = proj.t * wallLength(wall);
+        const rawOffset = along - opening.width;
+        updateOpening(opening.id, { offset: rawOffset }, { recordHistory: false });
+      }
+      return;
+    }
+
     if (dragging?.kind === 'placeable') {
+      const nextPosition = subtract(world, dragging.grabOffset);
       if (dragging.type === 'furniture') {
-        updateFurniture(dragging.id, { position: world });
+        updateFurniture(dragging.id, { position: nextPosition });
       } else {
-        updateLandscape(dragging.id, { position: world });
+        updateLandscape(dragging.id, { position: nextPosition });
       }
       return;
     }
@@ -819,6 +857,9 @@ export function FloorPlanCanvas() {
               <Group
                 key={opening.id}
                 onClick={() => setSelection({ type: 'opening', id: opening.id })}
+                onMouseDown={(e) => {
+                  e.cancelBubble = true;
+                }}
               >
                 <Line
                   points={[ds.x, ds.y, de.x, de.y]}

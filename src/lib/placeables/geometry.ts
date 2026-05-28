@@ -7,6 +7,25 @@ export type PlacedRect = {
   rotation: number;
 };
 
+/**
+ * Center position so the local corner at (-width/2, -depth/2) sits on cornerWorld.
+ * Matches the first corner in rectCorners (before rotation).
+ */
+export function centerFromCornerAnchor(
+  cornerWorld: Point,
+  width: number,
+  depth: number,
+  rotation: number,
+): Point {
+  const lx = -width / 2;
+  const ly = -depth / 2;
+  const c = Math.cos(rotation);
+  const s = Math.sin(rotation);
+  const ox = lx * c - ly * s;
+  const oy = lx * s + ly * c;
+  return { x: cornerWorld.x - ox, y: cornerWorld.y - oy };
+}
+
 /** Corners of a placed rectangle in world space (center at position). */
 export function rectCorners(rect: PlacedRect): Point[] {
   const hw = rect.width / 2;

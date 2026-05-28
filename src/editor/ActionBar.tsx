@@ -1,8 +1,14 @@
 import { useEffect } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
+import { PlanUploadControls } from './PlanUploadControls';
 import { ProjectControls } from './ProjectControls';
 
-export function ActionBar() {
+type Props = {
+  projectsView: boolean;
+  onToggleProjectsView: () => void;
+};
+
+export function ActionBar({ projectsView, onToggleProjectsView }: Props) {
   const show3DPreview = useFloorPlanStore((s) => s.show3DPreview);
   const setShow3DPreview = useFloorPlanStore((s) => s.setShow3DPreview);
   const undoStackLength = useFloorPlanStore((s) => s.undoStack.length);
@@ -37,6 +43,12 @@ export function ActionBar() {
   return (
     <header className="action-bar">
       <ProjectControls />
+      <PlanUploadControls />
+      <div className="action-bar-group">
+        <button type="button" className="action-bar-btn" onClick={onToggleProjectsView}>
+          {projectsView ? 'Back to editor' : 'Projects'}
+        </button>
+      </div>
 
       <div className="action-bar-group">
         <button

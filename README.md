@@ -11,7 +11,9 @@ Browser-based interior floor plan editor. Upload a plan photo, auto-detect walls
 - **Indoor furniture** (counter, sink, toilet, sofa, table, chairs, range, fridge) with editable dimensions
 - **Outdoor landscape** (trees, shrubs, beds, patio, path, lawn, pool) with editable dimensions
 - **Live 3D preview** with mitered wall corners and opening cuts
-- **Local persistence** (localStorage)
+- **Project persistence** in browser IndexedDB or Supabase (when logged in)
+- **Google OAuth login** (Supabase Auth)
+- **Projects page** for account-level project management
 
 ## Quick start
 
@@ -24,7 +26,7 @@ Open http://localhost:5173
 
 ## Workflow
 
-1. **Upload plan** — click *Upload plan* in the toolbar
+1. **Upload plan** — click *Upload plan* in the top action bar
 2. **Set scale** — select the Scale tool, click two points on a wall with a known length, enter the real-world measurement
 3. **Draw walls** — use the Wall tool; hold Shift for 45°/90° constraints; type a length and press Enter to fix the endpoint
 4. **Add openings** — Door/Window tools: click on a wall
@@ -32,13 +34,56 @@ Open http://localhost:5173
 6. **Edit dimensions** — select any item; the Properties panel shows width, depth, and height
 7. **3D preview** — updates automatically in the right panel
 
-Uploaded plan images are hidden by default. Turn on *Show uploaded image* in the toolbar if you want the photo visible while tracing.
+Uploaded plan images are hidden by default. Turn on *Show image* in the action bar if you want the photo visible while tracing.
+
+## Supabase setup (Google OAuth + cloud projects)
+
+Create a Supabase project and configure these Vite env vars:
+
+```bash
+VITE_SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR-ANON-KEY
+```
+
+Then create the `projects` table in Supabase SQL editor:
+
+```sql
+create table if not exists public.projects (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  updated_at timestamptz not null default now(),
+  plan_json jsonb not null
+);
+
+alter table public.projects enable row level security;
+
+create policy "users can read own projects"
+on public.projects for select
+using (auth.uid() = user_id);
+
+create policy "users can insert own projects"
+on public.projects for insert
+with check (auth.uid() = user_id);
+
+create policy "users can update own projects"
+on public.projects for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "users can delete own projects"
+on public.projects for delete
+using (auth.uid() = user_id);
+```
+
+In Supabase Auth settings, enable **Google** provider and add your Vercel URL as an allowed redirect URL.
 
 ## Stack
 
 - React 19 + TypeScript + Vite
 - react-konva (2D editor)
-- Zustand (state + localStorage)
+- Zustand (state + autosave)
+- Supabase (Auth + Postgres JSON storage)
 - OpenCV.js (lazy-loaded from CDN for tracing)
 - Three.js + React Three Fiber (3D viewer)
 
@@ -69,7 +114,7 @@ After Git is connected, every push to `main` triggers a new production deploymen
 ## Limitations (v1)
 
 - OpenCV detection works best on high-contrast line drawings; photos may need manual cleanup
-- Plans stay in the browser (no cloud sync)
+- Cloud sync requires Supabase env vars and auth setup
 - No PDF/SVG export yet
 - 3D uses simplified opening cuts (not full CSG)
 

@@ -3,14 +3,18 @@ import { useFloorPlanStore } from '../../store/floorPlanStore';
 export function PlanImageSettingsPanel() {
   const backgroundImage = useFloorPlanStore((s) => s.backgroundImage);
   const backgroundVisible = useFloorPlanStore((s) => s.backgroundVisible);
+  const traceLoading = useFloorPlanStore((s) => s.traceLoading);
+  const traceError = useFloorPlanStore((s) => s.traceError);
+  const suggestions = useFloorPlanStore((s) => s.suggestions);
   const setBackgroundVisible = useFloorPlanStore((s) => s.setBackgroundVisible);
   const clearBackground = useFloorPlanStore((s) => s.clearBackground);
+  const runWallTrace = useFloorPlanStore((s) => s.runWallTrace);
 
   if (!backgroundImage) {
     return (
       <p className="hint">
-        No plan image uploaded. Use <strong>Upload plan</strong> in the toolbar to add a tracing
-        background.
+        No plan image uploaded. Use <strong>Upload plan</strong> in the top action bar to add a
+        tracing background.
       </p>
     );
   }
@@ -30,6 +34,23 @@ export function PlanImageSettingsPanel() {
         />
         <span>Show uploaded image</span>
       </label>
+
+      <p className="hint">
+        Wall detection uses OpenCV in the background and can take several seconds on large
+        images. It does not run automatically after upload.
+      </p>
+      <button
+        type="button"
+        className="toolbar-btn"
+        disabled={traceLoading}
+        onClick={() => void runWallTrace()}
+      >
+        {traceLoading ? 'Detecting walls…' : 'Detect walls (optional)'}
+      </button>
+      {traceError && <p className="hint project-status error">{traceError}</p>}
+      {!traceLoading && suggestions.length > 0 && (
+        <p className="hint">{suggestions.length} wall suggestions on canvas — click to accept.</p>
+      )}
 
       <button type="button" className="toolbar-btn danger" onClick={clearBackground}>
         Remove image

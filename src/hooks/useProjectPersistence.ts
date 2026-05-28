@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { useSupabaseAuth } from './useSupabaseAuth';
 import { useFloorPlanStore } from '../store/floorPlanStore';
 import type { FloorPlan } from '../types/floorPlan';
 import {
@@ -12,8 +13,28 @@ import {
   type SavedProject,
   type SavedProjectMeta,
 } from '../lib/storage/projectStorage';
+import {
+  collectLocalBrowserProjects,
+  hasMeaningfulPlan,
+} from '../lib/storage/localProjectImport';
+import {
+  deleteSupabaseProject,
+  getSupabaseProject,
+  listSupabaseProjects,
+  saveSupabaseProject,
+} from '../lib/storage/supabaseProjectStorage';
+import { CloudSyncError } from '../lib/storage/supabaseErrors';
 
 const AUTOSAVE_MS = 1500;
+const CLOUD_MIGRATED_KEY_PREFIX = 'floorplan-studio:cloudMigrated:';
+
+function cloudMigratedKey(userId: string): string {
+  return `${CLOUD_MIGRATED_KEY_PREFIX}${userId}`;
+}
+
+export function clearCloudMigrationMarker(userId: string): void {
+  localStorage.removeItem(cloudMigratedKey(userId));
+}
 
 function planFingerprint(plan: FloorPlan): string {
   return JSON.stringify({
@@ -37,6 +58,7 @@ function planFingerprint(plan: FloorPlan): string {
 }
 
 export function useProjectPersistence() {
+  const auth = useSupabaseAuth();
   const storageReady = useFloorPlanStore((s) => s.storageReady);
   const projectId = useFloorPlanStore((s) => s.projectId);
   const projectName = useFloorPlanStore((s) => s.projectName);
@@ -45,6 +67,100 @@ export function useProjectPersistence() {
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedFingerprint = useRef<string | null>(null);
   const savingRef = useRef(false);
+  const cloudMode = auth.enabled && Boolean(auth.user);
+  const [saveDetail, setSaveDetail] = useState<string | null>(null);
+
+  const collectLocalProjects = useCallback(async () => {
+    const state = useFloorPlanStore.getState();
+    return collectLocalBrowserProjects({
+      id: state.projectId,
+      name: state.projectName,
+      exportPlan: () => state.exportPlan(),
+      wallCount: state.walls.length,
+    });
+  }, []);
+
+  const ensureLocalProjectsMigratedToCloud = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!auth.user) return { imported: 0, localCount: 0 };
+
+      const userId = auth.user.id;
+      const markerKey = cloudMigratedKey(userId);
+      const localProjects = await collectLocalProjects();
+      const localCount = localProjects.length;
+
+      if (localCount === 0) {
+        return { imported: 0, localCount: 0 };
+      }
+
+      let cloudProjects: SavedProjectMeta[] = [];
+      try {
+        cloudProjects = await listSupabaseProjects(userId);
+      } catch {
+        // Table/RLS issues — still attempt upload below.
+      }
+
+      const markerSet = localStorage.getItem(markerKey) === '1';
+      const cloudMissingLocal = localProjects.some(
+        (local) => !cloudProjects.some((cloud) => cloud.id === local.id),
+      );
+      const shouldUpload =
+        options?.force === true ||
+        cloudProjects.length === 0 ||
+        cloudMissingLocal ||
+        !markerSet;
+
+      if (!shouldUpload) {
+        return { imported: 0, localCount };
+      }
+
+      let imported = 0;
+      for (const project of localProjects) {
+        await saveSupabaseProject(userId, project);
+        imported += 1;
+      }
+      localStorage.setItem(markerKey, '1');
+      return { imported, localCount };
+    },
+    [auth.user, collectLocalProjects],
+  );
+
+  const importLocalBrowserProjects = useCallback(async () => {
+    if (!auth.user) {
+      throw new Error('Sign in to import browser projects to your account.');
+    }
+    clearCloudMigrationMarker(auth.user.id);
+    return ensureLocalProjectsMigratedToCloud({ force: true });
+  }, [auth.user, ensureLocalProjectsMigratedToCloud]);
+
+  const backend = useMemo(
+    () => ({
+      list: async (): Promise<SavedProjectMeta[]> => {
+        if (cloudMode && auth.user) return listSupabaseProjects(auth.user.id);
+        return listProjects();
+      },
+      get: async (id: string): Promise<SavedProject | undefined> => {
+        if (cloudMode && auth.user) return getSupabaseProject(auth.user.id, id);
+        return getProject(id);
+      },
+      save: async (project: SavedProject): Promise<void> => {
+        if (cloudMode && auth.user) {
+          await saveProject(project);
+          await saveSupabaseProject(auth.user.id, project);
+          return;
+        }
+        await saveProject(project);
+      },
+      remove: async (id: string): Promise<void> => {
+        if (cloudMode && auth.user) {
+          await deleteSupabaseProject(auth.user.id, id);
+          return;
+        }
+        await deleteProject(id);
+      },
+    }),
+    [auth.user, cloudMode],
+  );
 
   const persistCurrent = useCallback(async (nameOverride?: string) => {
     const state = useFloorPlanStore.getState();
@@ -66,19 +182,41 @@ export function useProjectPersistence() {
     useFloorPlanStore.setState({ saveStatus: 'saving' });
     savingRef.current = true;
     try {
-      await saveProject(project);
+      await backend.save(project);
       lastSavedFingerprint.current = planFingerprint(plan);
+      setSaveDetail(null);
       useFloorPlanStore.setState({
         projectId: id,
         projectName: name,
         saveStatus: 'saved',
       });
-    } catch {
-      useFloorPlanStore.setState({ saveStatus: 'error' });
+    } catch (err) {
+      const cloudSyncFailed = err instanceof CloudSyncError;
+      if (cloudSyncFailed) {
+        try {
+          await saveProject(project);
+          lastSavedFingerprint.current = planFingerprint(plan);
+          const detail = err.message;
+          setSaveDetail(detail);
+          useFloorPlanStore.setState({
+            projectId: id,
+            projectName: name,
+            saveStatus: 'saved',
+          });
+        } catch {
+          setSaveDetail(err.message);
+          useFloorPlanStore.setState({ saveStatus: 'error' });
+        }
+      } else {
+        const message =
+          err instanceof Error ? err.message : 'Could not save plan in this browser.';
+        setSaveDetail(message);
+        useFloorPlanStore.setState({ saveStatus: 'error' });
+      }
     } finally {
       savingRef.current = false;
     }
-  }, []);
+  }, [backend]);
 
   const scheduleAutosave = useCallback(() => {
     if (!useFloorPlanStore.getState().storageReady) return;
@@ -94,21 +232,45 @@ export function useProjectPersistence() {
     let cancelled = false;
 
     async function hydrate() {
-      const migrated = await migrateLegacyLocalStorage();
-      if (cancelled) return;
+      if (auth.enabled && auth.loading) return;
 
-      let project: SavedProject | null | undefined = migrated;
-      if (!project) {
-        const lastId = getLastProjectId();
-        if (lastId) {
-          project = await getProject(lastId);
+      try {
+      if (cloudMode) {
+        await ensureLocalProjectsMigratedToCloud();
+        if (cancelled) return;
+      }
+
+      let project: SavedProject | null | undefined = null;
+      if (!cloudMode) {
+        const migrated = await migrateLegacyLocalStorage();
+        if (cancelled) return;
+        project = migrated;
+        if (!project) {
+          const lastId = getLastProjectId();
+          if (lastId) {
+            project = await backend.get(lastId);
+          }
         }
       }
 
       if (!project) {
-        const all = await listProjects();
+        const all = await backend.list();
         if (all.length > 0) {
-          project = await getProject(all[0].id);
+          project = await backend.get(all[0].id);
+        }
+      }
+
+      if (!project && cloudMode) {
+        const localFallback = await collectLocalProjects();
+        if (localFallback.length > 0) {
+          project = localFallback[0];
+          if (auth.user) {
+            try {
+              await saveSupabaseProject(auth.user.id, project);
+            } catch {
+              // Still open from local data even if cloud write fails.
+            }
+          }
         }
       }
 
@@ -126,15 +288,47 @@ export function useProjectPersistence() {
         });
         lastSavedFingerprint.current = planFingerprint(project.plan);
       } else {
+        const localOnly = await collectLocalProjects();
+        const meaningful = localOnly.find((p) => hasMeaningfulPlan(p.plan));
+        if (meaningful) {
+          useFloorPlanStore.getState().importPlan(meaningful.plan, { recordHistory: false });
+          useFloorPlanStore.setState({
+            projectId: meaningful.id,
+            projectName: meaningful.name,
+            storageReady: true,
+            saveStatus: 'saved',
+            undoStack: [],
+            redoStack: [],
+          });
+          lastSavedFingerprint.current = planFingerprint(meaningful.plan);
+          if (cloudMode && auth.user) {
+            try {
+              await saveSupabaseProject(auth.user.id, meaningful);
+            } catch {
+              useFloorPlanStore.setState({ saveStatus: 'error' });
+            }
+          }
+        } else {
+          const id = uuidv4();
+          useFloorPlanStore.setState({
+            projectId: id,
+            projectName: 'Untitled plan',
+            storageReady: true,
+            saveStatus: 'saved',
+          });
+          lastSavedFingerprint.current = planFingerprint(useFloorPlanStore.getState().exportPlan());
+          await persistCurrent('Untitled plan');
+        }
+      }
+      } catch {
+        if (cancelled) return;
         const id = uuidv4();
         useFloorPlanStore.setState({
           projectId: id,
           projectName: 'Untitled plan',
           storageReady: true,
-          saveStatus: 'saved',
+          saveStatus: 'error',
         });
-        lastSavedFingerprint.current = planFingerprint(useFloorPlanStore.getState().exportPlan());
-        await persistCurrent('Untitled plan');
       }
     }
 
@@ -142,7 +336,16 @@ export function useProjectPersistence() {
     return () => {
       cancelled = true;
     };
-  }, [persistCurrent]);
+  }, [
+    auth.enabled,
+    auth.loading,
+    auth.user,
+    backend,
+    cloudMode,
+    ensureLocalProjectsMigratedToCloud,
+    collectLocalProjects,
+    persistCurrent,
+  ]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -205,7 +408,7 @@ export function useProjectPersistence() {
       useFloorPlanStore.setState({ saveStatus: 'saving' });
       savingRef.current = true;
       try {
-        await saveProject(project);
+        await backend.save(project);
         lastSavedFingerprint.current = planFingerprint(plan);
         useFloorPlanStore.setState({
           projectId: id,
@@ -218,7 +421,7 @@ export function useProjectPersistence() {
         savingRef.current = false;
       }
     },
-    [],
+    [backend],
   );
 
   const renameProject = useCallback(
@@ -231,7 +434,7 @@ export function useProjectPersistence() {
   );
 
   const loadProject = useCallback(async (id: string) => {
-    const project = await getProject(id);
+    const project = await backend.get(id);
     if (!project) return;
 
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -247,8 +450,8 @@ export function useProjectPersistence() {
       redoStack: [],
     });
     lastSavedFingerprint.current = planFingerprint(project.plan);
-    await saveProject({ ...project, updatedAt: Date.now() });
-  }, []);
+    await backend.save({ ...project, updatedAt: Date.now() });
+  }, [backend]);
 
   const createNewProject = useCallback(async () => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -275,9 +478,9 @@ export function useProjectPersistence() {
 
   const removeProject = useCallback(
     async (id: string) => {
-      await deleteProject(id);
+      await backend.remove(id);
       if (useFloorPlanStore.getState().projectId === id) {
-        const remaining = await listProjects();
+        const remaining = await backend.list();
         if (remaining.length > 0) {
           await loadProject(remaining[0].id);
         } else {
@@ -285,24 +488,50 @@ export function useProjectPersistence() {
         }
       }
     },
-    [loadProject, createNewProject],
+    [backend, loadProject, createNewProject],
   );
 
   const fetchProjectList = useCallback(async (): Promise<SavedProjectMeta[]> => {
-    return listProjects();
-  }, []);
+    return backend.list();
+  }, [backend]);
+
+  const renameAnyProject = useCallback(
+    async (id: string, name: string) => {
+      const trimmed = name.trim() || 'Untitled plan';
+      const project = await backend.get(id);
+      if (!project) return;
+      await backend.save({
+        ...project,
+        name: trimmed,
+        updatedAt: Date.now(),
+      });
+      if (useFloorPlanStore.getState().projectId === id) {
+        useFloorPlanStore.setState({ projectName: trimmed });
+      }
+    },
+    [backend],
+  );
 
   return {
+    authEnabled: auth.enabled,
+    authLoading: auth.loading,
+    user: auth.user,
+    cloudMode,
+    signInWithGoogle: auth.signInWithGoogle,
+    signOut: auth.signOut,
     storageReady,
     projectId,
     projectName,
     saveStatus,
+    saveDetail,
     saveNow,
     saveAs,
     renameProject,
     loadProject,
     createNewProject,
     removeProject,
+    renameAnyProject,
     fetchProjectList,
+    importLocalBrowserProjects,
   };
 }

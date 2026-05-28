@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProjectPersistence } from '../hooks/useProjectPersistence';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { SaveAsDialog } from './SaveAsDialog';
 
-function saveStatusLabel(status: string): string {
+function saveStatusLabel(status: string, detail: string | null): string {
+  if (status === 'saved' && detail) {
+    return 'Saved in browser';
+  }
   switch (status) {
     case 'dirty':
       return 'Unsaved changes';
@@ -21,9 +24,13 @@ function saveStatusLabel(status: string): string {
 export function ProjectControls() {
   const {
     storageReady,
+    authEnabled,
+    authLoading,
+    cloudMode,
     projectId,
     projectName,
     saveStatus,
+    saveDetail,
     saveNow,
     saveAs,
     renameProject,
@@ -38,10 +45,20 @@ export function ProjectControls() {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(projectName);
 
+  useEffect(() => {
+    setNameDraft(projectName);
+  }, [projectName]);
+
   if (!storageReady) {
+    const loadingLabel =
+      authEnabled && authLoading
+        ? 'Checking login…'
+        : cloudMode
+          ? 'Loading saved plans…'
+          : 'Preparing editor…';
     return (
       <div className="project-controls">
-        <span className="project-status muted">Loading saved plans…</span>
+        <span className="project-status muted">{loadingLabel}</span>
       </div>
     );
   }
@@ -87,10 +104,21 @@ export function ProjectControls() {
         )}
 
         <span
-          className={`project-status ${saveStatus === 'error' ? 'error' : 'muted'}`}
-          title="Plans are stored in this browser (IndexedDB)"
+          className={`project-status ${
+            saveStatus === 'error'
+              ? 'error'
+              : saveDetail
+                ? 'warn'
+                : 'muted'
+          }`}
+          title={
+            saveDetail ??
+            (cloudMode
+              ? 'Projects sync to your Supabase account; a copy is always kept in this browser.'
+              : 'Plans are stored in this browser (IndexedDB)')
+          }
         >
-          {saveStatusLabel(saveStatus)}
+          {saveStatusLabel(saveStatus, saveDetail)}
         </span>
 
         <div className="project-actions">
