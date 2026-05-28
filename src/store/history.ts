@@ -3,16 +3,15 @@ import type {
   LandscapeElement,
   LineSuggestion,
   LotSize,
-  Opening,
+  PlanLevel,
   Point,
   ScaleInfo,
   SunTime,
-  Wall,
 } from '../types/floorPlan';
 
 export type HistorySnapshot = {
-  walls: Wall[];
-  openings: Opening[];
+  levels: PlanLevel[];
+  activeLevelId: string;
   furniture: Furniture[];
   landscape: LandscapeElement[];
   wallHeight: number;
@@ -28,8 +27,8 @@ export type HistorySnapshot = {
 export const MAX_UNDO_STACK = 50;
 
 export type HistorySource = {
-  walls: Wall[];
-  openings: Opening[];
+  levels: PlanLevel[];
+  activeLevelId: string;
   furniture: Furniture[];
   landscape: LandscapeElement[];
   wallHeight: number;
@@ -44,8 +43,8 @@ export type HistorySource = {
 
 export function takeSnapshot(state: HistorySource): HistorySnapshot {
   return {
-    walls: structuredClone(state.walls),
-    openings: structuredClone(state.openings),
+    levels: structuredClone(state.levels),
+    activeLevelId: state.activeLevelId,
     furniture: structuredClone(state.furniture),
     landscape: structuredClone(state.landscape),
     wallHeight: state.wallHeight,

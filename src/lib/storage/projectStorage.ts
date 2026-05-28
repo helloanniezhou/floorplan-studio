@@ -1,4 +1,5 @@
 import type { FloorPlan } from '../../types/floorPlan';
+import { normalizePlanLevels } from '../plan/levels';
 import {
   DEFAULT_BACKGROUND_OFFSET,
   DEFAULT_NORTH_ANGLE_DEG,
@@ -121,7 +122,10 @@ export function setLastProjectId(id: string): void {
 }
 
 type LegacyPersistPayload = {
-  state?: Partial<FloorPlan>;
+  state?: Partial<FloorPlan> & {
+    walls?: import('../../types/floorPlan').Wall[];
+    openings?: import('../../types/floorPlan').Opening[];
+  };
 };
 
 /** One-time migration from Zustand localStorage persist. */
@@ -135,8 +139,10 @@ export async function migrateLegacyLocalStorage(): Promise<SavedProject | null> 
     if (!state?.walls) return null;
 
     const plan: FloorPlan = {
-      walls: state.walls ?? [],
-      openings: state.openings ?? [],
+      levels: normalizePlanLevels({
+        walls: state.walls ?? [],
+        openings: state.openings ?? [],
+      }),
       furniture: state.furniture ?? [],
       landscape: state.landscape ?? [],
       unit: state.unit ?? 'ft',

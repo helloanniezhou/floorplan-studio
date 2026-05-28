@@ -27,41 +27,6 @@ export const AFTER_SIGN_IN_PROJECTS_KEY = 'floorplan-studio:afterSignIn';
 
 const AUTH_WAIT_TIMEOUT_MS = 15_000;
 
-// #region agent log
-function debugAuthLog(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-  runId = 'pre-fix',
-) {
-  fetch('http://127.0.0.1:7440/ingest/2b54e79e-e18f-478e-9d13-67b75ba99ef0', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a9b910' },
-    body: JSON.stringify({
-      sessionId: 'a9b910',
-      runId,
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-}
-
-function pkceStorageHints(): { supabaseKeyCount: number; hasVerifierKey: boolean } {
-  try {
-    const keys = Object.keys(localStorage);
-    const supabaseKeys = keys.filter((k) => k.startsWith('sb-'));
-    const hasVerifierKey = supabaseKeys.some((k) => k.includes('code-verifier') || k.includes('verifier'));
-    return { supabaseKeyCount: supabaseKeys.length, hasVerifierKey };
-  } catch {
-    return { supabaseKeyCount: 0, hasVerifierKey: false };
-  }
-}
-// #endregion
-
 /** True when returning from Google OAuth or when sign-in was started from Projects. */
 export function hasPostLoginProjectsIntent(): boolean {
   const params = new URLSearchParams(window.location.search);
@@ -134,20 +99,6 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const expectedOrigin = sessionStorage.getItem(OAUTH_ORIGIN_KEY);
-    // #region agent log
-    debugAuthLog('A', 'SupabaseAuthContext.tsx:effect-start', 'auth effect start', {
-      hasCode: Boolean(code),
-      codeLen: code?.length ?? 0,
-      expectedOrigin,
-      actualOrigin: window.location.origin,
-      originMatch: !expectedOrigin || expectedOrigin === window.location.origin,
-      search: window.location.search,
-      envProblem: getSupabaseEnvProblem() ?? 'none',
-      keyLen: (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY ?? '')
-        .length,
-      ...pkceStorageHints(),
-    });
-    // #endregion
 
     if (code && expectedOrigin && expectedOrigin !== window.location.origin) {
       cleanOAuthParamsFromUrl();
@@ -160,14 +111,6 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!isActive()) return;
-      // #region agent log
-      debugAuthLog('D', 'SupabaseAuthContext.tsx:onAuthStateChange', 'auth state change', {
-        event,
-        hasSession: Boolean(nextSession),
-        hasCode: hasOAuthCodeInUrl(),
-        userId: nextSession?.user?.id ? 'present' : 'none',
-      });
-      // #endregion
       if (nextSession) {
         applySession(nextSession);
       }
@@ -181,15 +124,6 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
       try {
         if (code) {
           const { session: exchanged, error } = await exchangeOAuthCodeOnce(code);
-          // #region agent log
-          debugAuthLog(
-            'A',
-            'SupabaseAuthContext.tsx:exchange',
-            'exchangeCodeForSession done',
-            { hasSession: Boolean(exchanged), error, ...pkceStorageHints() },
-            'post-fix',
-          );
-          // #endregion
           if (!isActive()) return;
           if (error && !exchanged) {
             cleanOAuthParamsFromUrl();
@@ -206,15 +140,6 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
         }
 
         const { data, error } = await supabase.auth.getSession();
-        // #region agent log
-        debugAuthLog(
-          'A',
-          'SupabaseAuthContext.tsx:getSession',
-          'getSession resolved',
-          { hasSession: Boolean(data.session), error: error?.message ?? null },
-          'post-fix',
-        );
-        // #endregion
         if (!isActive()) return;
         if (error) {
           applySession(null, error.message);
@@ -234,12 +159,6 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
       setLoading((stillLoading) => {
         if (!stillLoading) return stillLoading;
         if (hasOAuthCodeInUrl()) {
-          // #region agent log
-          debugAuthLog('E', 'SupabaseAuthContext.tsx:timeout', 'auth wait timeout fired', {
-            hasCode: true,
-            ...pkceStorageHints(),
-          });
-          // #endregion
           setAuthError(
             'Sign-in did not finish. Refresh the page once, or clear site data and sign in again from http://localhost:5173.',
           );
@@ -261,13 +180,6 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     const origin = window.location.origin;
     sessionStorage.setItem(OAUTH_ORIGIN_KEY, origin);
     sessionStorage.setItem(AFTER_SIGN_IN_PROJECTS_KEY, 'projects');
-    // #region agent log
-    debugAuthLog('C', 'SupabaseAuthContext.tsx:signInWithGoogle', 'starting OAuth', {
-      origin,
-      redirectTo: `${origin}${window.location.pathname}?view=projects`,
-      ...pkceStorageHints(),
-    });
-    // #endregion
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {

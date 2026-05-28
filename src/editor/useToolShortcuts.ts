@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
+import { getLayoutGeometry } from '../lib/plan/layout';
 import type { Tool } from '../types/floorPlan';
 
 const SHORTCUT_TO_TOOL: Record<string, Tool> = {
@@ -7,6 +8,7 @@ const SHORTCUT_TO_TOOL: Record<string, Tool> = {
   w: 'wall',
   r: 'rect',
   k: 'scale',
+  l: 'light',
 };
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -33,10 +35,11 @@ export function useToolShortcuts(): void {
       }
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
-        const { tool, selectAllWalls, walls } = useFloorPlanStore.getState();
-        if (tool !== 'select' || walls.length === 0) return;
+        const state = useFloorPlanStore.getState();
+        const geo = getLayoutGeometry(state, state.activeLevelId);
+        if (state.tool !== 'select' || geo.walls.length === 0) return;
         e.preventDefault();
-        selectAllWalls();
+        state.selectAllWalls();
         return;
       }
 
@@ -82,5 +85,6 @@ export const TOOL_SHORTCUT_LABELS: Partial<Record<Tool, string>> = {
   wall: 'W',
   rect: 'R',
   scale: 'K',
+  light: 'L',
   pan: 'Space',
 };

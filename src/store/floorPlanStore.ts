@@ -8,6 +8,8 @@ import type {
   FurnitureKind,
   LandscapeElement,
   LandscapeKind,
+  LightFixture,
+  LightKind,
   LineSuggestion,
   LotSize,
   Opening,
@@ -20,6 +22,22 @@ import type {
   TraceParams,
   Wall,
 } from '../types/floorPlan';
+import { getLayoutGeometry, patchLayoutGeometry } from '../lib/plan/layout';
+import {
+  canAddFloorLevel,
+  canRemoveFloorLevel,
+  createEmptyLevel,
+  defaultPlanLevels,
+  floorLevelCount,
+  floorLevels,
+  normalizePlanLevels,
+  resolveActiveLevelId,
+  sortLevels,
+} from '../lib/plan/levels';
+import {
+  defaultLightHeight,
+  defaultLightIntensity,
+} from '../lib/lights/defaults';
 import {
   DEFAULT_BACKGROUND_OFFSET,
   DEFAULT_NORTH_ANGLE_DEG,
@@ -57,7 +75,7 @@ import {
   defaultWallThickness,
   defaultWindowSill,
 } from '../lib/units/defaults';
-import { convertPlanToUnit } from '../lib/units/convert';
+import { convertPlanToUnit, unitConversionFactor } from '../lib/units/convert';
 import { setWallLength, wallLength } from '../lib/geometry/vectors';
 import { MAX_UNDO_STACK, takeSnapshot, type HistorySnapshot } from './history';
 import {
@@ -78,7 +96,16 @@ type ScaleDraft = {
 
 export type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error';
 
+function patchActiveLevel(
+  state: Pick<FloorPlan, 'levels'> & { activeLevelId: string },
+  patch: Partial<ReturnType<typeof getLayoutGeometry>>,
+): Pick<FloorPlan, 'levels'> {
+  return patchLayoutGeometry(state.levels, state.activeLevelId, patch);
+}
+
 type FloorPlanState = FloorPlan & {
+  activeLevelId: string;
+  activeLightKind: LightKind;
   tool: Tool;
   selection: Selection;
   activePlaceable: ActivePlaceable;
@@ -97,6 +124,11 @@ type FloorPlanState = FloorPlan & {
   undoStack: HistorySnapshot[];
   redoStack: HistorySnapshot[];
 
+  setActiveLevelId: (levelId: string) => void;
+  addFloorLevel: () => void;
+  removeFloorLevel: (levelId: string) => void;
+  setActiveLightKind: (kind: LightKind) => void;
+  startLightPlace: (kind: LightKind) => void;
   setTool: (tool: Tool) => void;
   setActivePlaceable: (placeable: ActivePlaceable) => void;
   startPlace: (placeable: ActivePlaceable) => void;
@@ -191,6 +223,15 @@ type FloorPlanState = FloorPlan & {
   ) => void;
   deleteLandscape: (id: string) => void;
 
+  addLight: (position: Point, kind?: LightKind) => string;
+  updateLight: (
+    id: string,
+    patch: Partial<LightFixture>,
+    options?: { recordHistory?: boolean },
+  ) => void;
+  deleteLight: (id: string) => void;
+  placeActiveLight: (position: Point) => string;
+
   placeActiveItem: (position: Point) => string;
 
   setSuggestions: (suggestions: LineSuggestion[]) => void;
@@ -211,9 +252,10 @@ const DEFAULT_ACTIVE_PLACEABLE: ActivePlaceable = {
   kind: 'kitchenCounter',
 };
 
+const initialLevels = defaultPlanLevels();
+
 const initialPlan: FloorPlan = {
-  walls: [],
-  openings: [],
+  levels: initialLevels,
   furniture: [],
   landscape: [],
   unit: 'ft',
@@ -320,6 +362,8 @@ async function traceWithWorker(
 
 export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   ...initialPlan,
+  activeLevelId: initialLevels[0]!.id,
+  activeLightKind: 'ceiling',
   tool: 'wall',
   selection: null,
   activePlaceable: DEFAULT_ACTIVE_PLACEABLE,
@@ -337,6 +381,83 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   show3DPreview: false,
   undoStack: [],
   redoStack: [],
+
+  setActiveLevelId: (levelId) => {
+    if (get().activeLevelId === levelId) return;
+    const level = get().levels.find((l) => l.id === levelId);
+    set({
+      activeLevelId: levelId,
+      selection: null,
+      wallDraftStart: null,
+      scaleDraft: { pointA: null, pointB: null },
+      tool:
+        level?.kind === 'roof'
+          ? 'wall'
+          : get().tool === 'place'
+            ? 'select'
+            : get().tool,
+    });
+  },
+
+  addFloorLevel: () => {
+    const { levels } = get();
+    if (!canAddFloorLevel(levels)) return;
+    const n = floorLevelCount(levels) + 1;
+    const newLevel = createEmptyLevel('floor', `Floor ${n}`);
+    const roofIdx = levels.findIndex((l) => l.kind === 'roof');
+    const next =
+      roofIdx >= 0
+        ? [...levels.slice(0, roofIdx), newLevel, ...levels.slice(roofIdx)]
+        : [...levels, newLevel];
+    get().recordHistory();
+    set({
+      levels: next,
+      activeLevelId: newLevel.id,
+      selection: null,
+      wallDraftStart: null,
+      tool: 'wall',
+    });
+  },
+
+  removeFloorLevel: (levelId) => {
+    const { levels, activeLevelId } = get();
+    if (!canRemoveFloorLevel(levels, levelId)) return;
+
+    const sorted = sortLevels(levels);
+    const removeIdx = sorted.findIndex((l) => l.id === levelId);
+    const nextLevels = levels.filter((l) => l.id !== levelId);
+
+    let nextActiveId = activeLevelId;
+    if (activeLevelId === levelId) {
+      const fallback =
+        sorted[removeIdx - 1]?.kind === 'floor'
+          ? sorted[removeIdx - 1]
+          : sorted[removeIdx + 1]?.kind === 'floor'
+            ? sorted[removeIdx + 1]
+            : floorLevels(nextLevels)[0];
+      nextActiveId = fallback?.id ?? resolveActiveLevelId(nextLevels, '');
+    }
+
+    get().recordHistory();
+    set({
+      levels: nextLevels,
+      activeLevelId: resolveActiveLevelId(nextLevels, nextActiveId),
+      selection: null,
+      wallDraftStart: null,
+      scaleDraft: { pointA: null, pointB: null },
+    });
+  },
+
+  setActiveLightKind: (activeLightKind) => set({ activeLightKind }),
+
+  startLightPlace: (kind) =>
+    set({
+      tool: 'light',
+      activeLightKind: kind,
+      selection: null,
+      wallDraftStart: null,
+      scaleDraft: { pointA: null, pointB: null },
+    }),
 
   setTool: (tool) =>
     set({
@@ -380,7 +501,8 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   },
 
   selectAllWalls: () => {
-    const ids = get().walls.map((w) => w.id);
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
+    const ids = geo.walls.map((w) => w.id);
     set({ selection: ids.length > 0 ? { type: 'walls', ids } : null });
   },
 
@@ -389,9 +511,13 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     if (sel?.type !== 'walls' || sel.ids.length === 0) return;
     get().recordHistory();
     const idSet = new Set(sel.ids);
+    const layout = get().activeLevelId;
+    const geo = getLayoutGeometry(get(), layout);
     set({
-      walls: get().walls.filter((w) => !idSet.has(w.id)),
-      openings: get().openings.filter((o) => !idSet.has(o.wallId)),
+      ...patchActiveLevel(get(), {
+        walls: geo.walls.filter((w) => !idSet.has(w.id)),
+        openings: geo.openings.filter((o) => !idSet.has(o.wallId)),
+      }),
       selection: null,
     });
   },
@@ -412,12 +538,22 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       case 'landscape':
         get().deleteLandscape(sel.id);
         break;
+      case 'light':
+        get().deleteLight(sel.id);
+        break;
     }
   },
 
   copySelection: () => {
     const state = get();
-    const payload = buildClipboardFromSelection(state);
+    const geo = getLayoutGeometry(state, state.activeLevelId);
+    const payload = buildClipboardFromSelection({
+      selection: state.selection,
+      walls: geo.walls,
+      openings: geo.openings,
+      furniture: state.furniture,
+      landscape: state.landscape,
+    });
     if (payload) setPlanClipboard(payload);
   },
 
@@ -449,15 +585,20 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
           })
           .filter((o): o is Opening => o !== null);
         const newIds = newWalls.map((w) => w.id);
+        const layout = get().activeLevelId;
+        const geo = getLayoutGeometry(get(), layout);
         set({
-          walls: [...get().walls, ...newWalls],
-          openings: [...get().openings, ...newOpenings],
+          ...patchActiveLevel(get(), {
+            walls: [...geo.walls, ...newWalls],
+            openings: [...geo.openings, ...newOpenings],
+          }),
           selection: newIds.length > 0 ? { type: 'walls', ids: newIds } : null,
         });
         break;
       }
       case 'opening': {
-        const wall = get().walls.find((w) => w.id === clip.opening.wallId);
+        const geo = getLayoutGeometry(get(), get().activeLevelId);
+        const wall = geo.walls.find((w) => w.id === clip.opening.wallId);
         if (!wall) break;
         const len = wallLength(wall);
         const width = clip.opening.width;
@@ -473,8 +614,12 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
         };
         const clamped = clampOpeningOnWall(opening, len);
         const placed = { ...opening, offset: clamped.offset, width: clamped.width };
+        const layout = get().activeLevelId;
+        const openingsGeo = getLayoutGeometry(get(), layout);
         set({
-          openings: [...get().openings, placed],
+          ...patchActiveLevel(get(), {
+            openings: [...openingsGeo.openings, placed],
+          }),
           selection: { type: 'opening', id: placed.id },
         });
         break;
@@ -538,10 +683,15 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     if (undoStack.length === 0) return;
     const previous = undoStack[undoStack.length - 1];
     const current = takeSnapshot(get());
+    const activeLevelId = resolveActiveLevelId(
+      previous.levels,
+      previous.activeLevelId ?? get().activeLevelId,
+    );
     set({
       undoStack: undoStack.slice(0, -1),
       redoStack: [...redoStack, current].slice(-MAX_UNDO_STACK),
       ...previous,
+      activeLevelId,
     });
   },
 
@@ -550,23 +700,32 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     if (redoStack.length === 0) return;
     const next = redoStack[redoStack.length - 1];
     const current = takeSnapshot(get());
+    const activeLevelId = resolveActiveLevelId(
+      next.levels,
+      next.activeLevelId ?? get().activeLevelId,
+    );
     set({
       redoStack: redoStack.slice(0, -1),
       undoStack: [...undoStack, current].slice(-MAX_UNDO_STACK),
       ...next,
+      activeLevelId,
     });
   },
 
   setBackgroundImage: (dataUrl, width, height) => {
     cancelActiveTrace();
+    const ground = floorLevels(get().levels)[0];
     set({
       backgroundImage: dataUrl,
       imageSize: { width, height },
       backgroundVisible: true,
       backgroundOffset: { ...DEFAULT_BACKGROUND_OFFSET },
       scale: null,
-      walls: [],
-      openings: [],
+      levels: ground
+        ? get().levels.map((l) =>
+            l.id === ground.id ? { ...l, walls: [], openings: [] } : l,
+          )
+        : get().levels,
       furniture: [],
       landscape: [],
       suggestions: [],
@@ -604,7 +763,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   resetScaleDraft: () => set({ scaleDraft: { pointA: null, pointB: null } }),
 
   applyScale: (realLength) => {
-    const { scaleDraft, walls, scale: existingScale, unit } = get();
+    const { scaleDraft, levels, scale: existingScale, unit } = get();
     if (!scaleDraft.pointA || !scaleDraft.pointB || realLength <= 0) return;
 
     const pixelDist = Math.hypot(
@@ -618,17 +777,20 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     const pixelsPerUnit = pixelDist / realLength;
     const newScale: ScaleInfo = { pixelsPerUnit };
 
-    let updatedWalls = walls;
-    if (!existingScale) {
-      updatedWalls = convertWallsToWorld(walls, pixelsPerUnit).map((w) => ({
+    const convertWalls = (list: Wall[]) => {
+      if (existingScale) return list;
+      return convertWallsToWorld(list, pixelsPerUnit).map((w) => ({
         ...w,
         thickness: defaultWallThickness(unit),
       }));
-    }
+    };
 
     set({
       scale: newScale,
-      walls: updatedWalls,
+      levels: levels.map((level) => ({
+        ...level,
+        walls: convertWalls(level.walls),
+      })),
       scaleDraft: { pointA: null, pointB: null },
       tool: 'wall',
     });
@@ -638,13 +800,57 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     const prev = get().unit;
     if (prev === unit) return;
     get().recordHistory();
-    const { walls, openings, wallHeight, scale, lotSize, gridSize, backgroundOffset } = get();
+    const { levels, wallHeight, scale, lotSize, gridSize, backgroundOffset } = get();
+    const sample = levels[0];
     const converted = convertPlanToUnit(
-      { walls, openings, wallHeight, scale, lotSize, gridSize, backgroundOffset },
+      {
+        walls: sample?.walls ?? [],
+        openings: sample?.openings ?? [],
+        wallHeight,
+        scale,
+        lotSize,
+        gridSize,
+        backgroundOffset,
+      },
       prev,
       unit,
     );
-    set({ unit, ...converted });
+    const lightFactor = unitConversionFactor(prev, unit);
+    const scaleLights = (items: LightFixture[]) =>
+      items.map((l) => ({
+        ...l,
+        position: { x: l.position.x * lightFactor, y: l.position.y * lightFactor },
+        height: l.height * lightFactor,
+      }));
+    set({
+      unit,
+      wallHeight: converted.wallHeight,
+      scale: converted.scale,
+      lotSize: converted.lotSize,
+      gridSize: converted.gridSize,
+      backgroundOffset: converted.backgroundOffset,
+      levels: levels.map((level) => {
+        const levelConverted = convertPlanToUnit(
+          {
+            walls: level.walls,
+            openings: level.openings,
+            wallHeight,
+            scale: converted.scale,
+            lotSize: converted.lotSize,
+            gridSize: converted.gridSize,
+            backgroundOffset: converted.backgroundOffset,
+          },
+          prev,
+          unit,
+        );
+        return {
+          ...level,
+          walls: levelConverted.walls,
+          openings: levelConverted.openings,
+          lights: scaleLights(level.lights),
+        };
+      }),
+    });
   },
 
   setLotSize: (lotSize) => set({ lotSize }),
@@ -657,7 +863,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   setSunTime: (sunTime) => set({ sunTime }),
 
   addWall: (start, end, thickness) => {
-    const { unit } = get();
+    const { unit, activeLevelId } = get();
     const id = uuidv4();
     const wall: Wall = {
       id,
@@ -665,8 +871,9 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       end,
       thickness: thickness ?? defaultWallThickness(unit),
     };
+    const geo = getLayoutGeometry(get(), activeLevelId);
     get().recordHistory();
-    set({ walls: [...get().walls, wall] });
+    set(patchActiveLevel(get(), { walls: [...geo.walls, wall] }));
     return id;
   },
 
@@ -674,13 +881,17 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     if (options?.recordHistory !== false) {
       get().recordHistory();
     }
-    set({
-      walls: get().walls.map((w) => (w.id === id ? { ...w, ...patch } : w)),
-    });
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
+    set(
+      patchActiveLevel(get(), {
+        walls: geo.walls.map((w) => (w.id === id ? { ...w, ...patch } : w)),
+      }),
+    );
   },
 
   updateWallLength: (id, length, anchor = 'start') => {
-    const wall = get().walls.find((w) => w.id === id);
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
+    const wall = geo.walls.find((w) => w.id === id);
     if (!wall) return;
     get().recordHistory();
     const updated = setWallLength(wall, Math.max(0.01, length), anchor);
@@ -690,6 +901,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   deleteWall: (id) => {
     get().recordHistory();
     const sel = get().selection;
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
     let nextSelection: Selection = sel;
     if (sel?.type === 'walls') {
       const ids = sel.ids.filter((x) => x !== id);
@@ -702,34 +914,39 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
             }
           : null;
     } else if (sel?.type === 'opening') {
-      const opening = get().openings.find((o) => o.id === sel.id);
+      const opening = geo.openings.find((o) => o.id === sel.id);
       if (opening?.wallId === id) nextSelection = null;
     }
 
     set({
-      walls: get().walls.filter((w) => w.id !== id),
-      openings: get().openings.filter((o) => o.wallId !== id),
+      ...patchActiveLevel(get(), {
+        walls: geo.walls.filter((w) => w.id !== id),
+        openings: geo.openings.filter((o) => o.wallId !== id),
+      }),
       selection: nextSelection,
     });
   },
 
-  setWallsSilent: (walls) => set({ walls }),
+  setWallsSilent: (walls) => set(patchActiveLevel(get(), { walls })),
 
   setWallsGeometry: (updates, options) => {
     if (options?.recordHistory !== false) {
       get().recordHistory();
     }
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
     const map = new Map(updates.map((u) => [u.id, u]));
-    set({
-      walls: get().walls.map((w) => {
-        const u = map.get(w.id);
-        return u ? { ...w, start: u.start, end: u.end } : w;
+    set(
+      patchActiveLevel(get(), {
+        walls: geo.walls.map((w) => {
+          const u = map.get(w.id);
+          return u ? { ...w, start: u.start, end: u.end } : w;
+        }),
       }),
-    });
+    );
   },
 
   addRectangleWalls: (start, end) => {
-    const { unit } = get();
+    const { unit, activeLevelId } = get();
     get().recordHistory();
     const corners = rectangleFromCorners(start, end);
     const segments = rectangleWallSegments(corners);
@@ -740,14 +957,16 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       end: seg.end,
       thickness,
     }));
+    const geo = getLayoutGeometry(get(), activeLevelId);
     set({
-      walls: [...get().walls, ...newWalls],
+      ...patchActiveLevel(get(), { walls: [...geo.walls, ...newWalls] }),
       selection: { type: 'walls', ids: newWalls.map((w) => w.id) },
     });
   },
 
   addOpening: (wallId, type, positionAlongWall, width, placement = 'start') => {
-    const wall = get().walls.find((w) => w.id === wallId);
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
+    const wall = geo.walls.find((w) => w.id === wallId);
     if (!wall) return '';
 
     const { unit } = get();
@@ -773,7 +992,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     };
 
     set({
-      openings: [...get().openings, opening],
+      ...patchActiveLevel(get(), { openings: [...geo.openings, opening] }),
       selection: { type: 'opening', id: opening.id },
     });
     return opening.id;
@@ -783,26 +1002,32 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     if (options?.recordHistory !== false) {
       get().recordHistory();
     }
-    set({
-      openings: get().openings.map((o) => {
-        if (o.id !== id) return o;
-        const merged = { ...o, ...patch };
-        const wall = get().walls.find((w) => w.id === merged.wallId);
-        if (wall) {
-          const clamped = clampOpeningOnWall(merged, wallLength(wall));
-          merged.offset = clamped.offset;
-          merged.width = clamped.width;
-        }
-        return merged;
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
+    set(
+      patchActiveLevel(get(), {
+        openings: geo.openings.map((o) => {
+          if (o.id !== id) return o;
+          const merged = { ...o, ...patch };
+          const wall = geo.walls.find((w) => w.id === merged.wallId);
+          if (wall) {
+            const clamped = clampOpeningOnWall(merged, wallLength(wall));
+            merged.offset = clamped.offset;
+            merged.width = clamped.width;
+          }
+          return merged;
+        }),
       }),
-    });
+    );
   },
 
   deleteOpening: (id) => {
     get().recordHistory();
     const sel = get().selection;
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
     set({
-      openings: get().openings.filter((o) => o.id !== id),
+      ...patchActiveLevel(get(), {
+        openings: geo.openings.filter((o) => o.id !== id),
+      }),
       selection: sel?.type === 'opening' && sel.id === id ? null : sel,
     });
   },
@@ -894,8 +1119,54 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     });
   },
 
+  addLight: (position, kind) => {
+    const { wallHeight, activeLevelId, activeLightKind } = get();
+    const lightKind = kind ?? activeLightKind;
+    const item: LightFixture = {
+      id: uuidv4(),
+      position,
+      kind: lightKind,
+      intensity: defaultLightIntensity(),
+      height: defaultLightHeight(lightKind, wallHeight),
+    };
+    const geo = getLayoutGeometry(get(), activeLevelId);
+    get().recordHistory();
+    set({
+      ...patchActiveLevel(get(), { lights: [...geo.lights, item] }),
+      selection: { type: 'light', id: item.id },
+    });
+    return item.id;
+  },
+
+  updateLight: (id, patch, options) => {
+    if (options?.recordHistory !== false) {
+      get().recordHistory();
+    }
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
+    set(
+      patchActiveLevel(get(), {
+        lights: geo.lights.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+      }),
+    );
+  },
+
+  deleteLight: (id) => {
+    get().recordHistory();
+    const sel = get().selection;
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
+    set({
+      ...patchActiveLevel(get(), {
+        lights: geo.lights.filter((l) => l.id !== id),
+      }),
+      selection: sel?.type === 'light' && sel.id === id ? null : sel,
+    });
+  },
+
+  placeActiveLight: (position) => get().addLight(position),
+
   placeActiveItem: (clickWorld) => {
-    const { activePlaceable, addFurniture, addLandscape, unit, walls } = get();
+    const { activePlaceable, addFurniture, addLandscape, unit, levels } = get();
+    const walls = floorLevels(levels)[0]?.walls ?? [];
     const rotation = 0;
     const snapRadius = placeableWallSnapRadius(unit);
 
@@ -954,7 +1225,9 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
           thickness: defaultWallThickness(unit),
         }
       : { id: uuidv4(), start: s.start, end: s.end, thickness };
-    set({ walls: [...get().walls, wall] });
+    const layout = get().activeLevelId;
+    const geo = getLayoutGeometry(get(), layout);
+    set(patchActiveLevel(get(), { walls: [...geo.walls, wall] }));
 
     set({
       suggestions: suggestions.filter((x) => x.id !== id),
@@ -984,12 +1257,15 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     };
 
     get().recordHistory();
-    set({
-      walls: get().walls.map((w) => {
-        const straight = orthogonalize(w.start, w.end);
-        return { ...w, ...straight };
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
+    set(
+      patchActiveLevel(get(), {
+        walls: geo.walls.map((w) => {
+          const straight = orthogonalize(w.start, w.end);
+          return { ...w, ...straight };
+        }),
       }),
-    });
+    );
   },
 
   runWallTrace: async () => {
@@ -1023,9 +1299,16 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     if (options?.recordHistory !== false) {
       get().recordHistory();
     }
+    const levels = normalizePlanLevels(plan);
+    const activeLevelId = resolveActiveLevelId(
+      levels,
+      get().activeLevelId ?? levels[0]?.id,
+    );
     set({
       ...initialPlan,
       ...plan,
+      levels,
+      activeLevelId,
       furniture: plan.furniture ?? [],
       landscape: plan.landscape ?? [],
       traceParams: plan.traceParams ?? DEFAULT_TRACE_PARAMS,
@@ -1040,8 +1323,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
 
   exportPlan: (): FloorPlan => {
     const {
-      walls,
-      openings,
+      levels,
       furniture,
       landscape,
       unit,
@@ -1059,8 +1341,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       gridSize,
     } = get();
     return {
-      walls,
-      openings,
+      levels,
       furniture,
       landscape,
       unit,
@@ -1081,8 +1362,11 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
 
   resetPlan: () => {
     cancelActiveTrace();
+    const levels = defaultPlanLevels();
     set({
       ...initialPlan,
+      levels,
+      activeLevelId: levels[0]!.id,
       tool: 'wall',
       selection: null,
       activePlaceable: DEFAULT_ACTIVE_PLACEABLE,

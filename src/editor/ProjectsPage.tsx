@@ -113,7 +113,7 @@ export function ProjectsPage({
     return (
       <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
         <header className="projects-header">
-          <h2>Projects</h2>
+          <h1 className="projects-brand">Dreamome</h1>
         </header>
         <p className="muted">Checking login…</p>
       </section>
@@ -124,7 +124,7 @@ export function ProjectsPage({
     return (
       <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
         <header className="projects-header">
-          <h2>Projects</h2>
+          <h1 className="projects-brand">Dreamome</h1>
         </header>
         <div className="projects-empty">
           <p>Sign in with Google to manage projects for your account in Supabase.</p>
@@ -162,7 +162,7 @@ export function ProjectsPage({
     return (
       <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
         <header className="projects-header">
-          <h2>Projects</h2>
+          <h1 className="projects-brand">Dreamome</h1>
         </header>
         <div className="projects-empty">
           <p className="muted">
@@ -177,15 +177,7 @@ export function ProjectsPage({
   return (
     <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
       <header className="projects-header">
-        <div>
-          <h2>Projects</h2>
-          <div className="projects-account">
-            <span className="projects-account-email">{userLabel}</span>
-            <button type="button" className="action-bar-btn" onClick={() => void signOut()}>
-              Sign out
-            </button>
-          </div>
-        </div>
+        <h1 className="projects-brand">Dreamome</h1>
         <div className="projects-header-actions">
           <button
             type="button"
@@ -195,6 +187,12 @@ export function ProjectsPage({
             }}
           >
             New project
+          </button>
+        </div>
+        <div className="projects-account">
+          <span className="projects-account-email">{userLabel}</span>
+          <button type="button" className="action-bar-btn" onClick={() => void signOut()}>
+            Sign out
           </button>
         </div>
       </header>

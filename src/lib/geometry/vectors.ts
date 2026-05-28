@@ -32,6 +32,10 @@ export function dot(a: Point, b: Point): number {
   return a.x * b.x + a.y * b.y;
 }
 
+export function cross(a: Point, b: Point): number {
+  return a.x * b.y - a.y * b.x;
+}
+
 export function perpendicular(v: Point): Point {
   return { x: -v.y, y: v.x };
 }

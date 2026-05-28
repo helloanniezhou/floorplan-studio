@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
+import { downloadPlanPdf } from '../lib/export/planPdf';
 import { ProjectControls } from './ProjectControls';
+import { AuthControls } from './AuthControls';
 
 function UndoIcon() {
   return (
@@ -51,6 +53,9 @@ type Props = {
 export function ActionBar({ onBackToProjects }: Props) {
   const show3DPreview = useFloorPlanStore((s) => s.show3DPreview);
   const setShow3DPreview = useFloorPlanStore((s) => s.setShow3DPreview);
+  const exportPlan = useFloorPlanStore((s) => s.exportPlan);
+  const projectName = useFloorPlanStore((s) => s.projectName);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const undoStackLength = useFloorPlanStore((s) => s.undoStack.length);
   const redoStackLength = useFloorPlanStore((s) => s.redoStack.length);
   const undo = useFloorPlanStore((s) => s.undo);
@@ -107,6 +112,24 @@ export function ActionBar({ onBackToProjects }: Props) {
       </div>
 
       <div className="action-bar-group">
+        {!show3DPreview && (
+          <button
+            type="button"
+            className="action-bar-btn"
+            disabled={exportingPdf}
+            onClick={() => {
+              setExportingPdf(true);
+              void downloadPlanPdf(exportPlan(), projectName)
+                .catch((err: unknown) => {
+                  const msg = err instanceof Error ? err.message : 'PDF export failed.';
+                  window.alert(msg);
+                })
+                .finally(() => setExportingPdf(false));
+            }}
+          >
+            {exportingPdf ? 'Exporting…' : 'Download PDF'}
+          </button>
+        )}
         {show3DPreview ? (
           <button
             type="button"
@@ -125,6 +148,8 @@ export function ActionBar({ onBackToProjects }: Props) {
           </button>
         )}
       </div>
+
+      <AuthControls />
     </header>
   );
 }

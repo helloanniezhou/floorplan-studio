@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
+import { EMPTY_WALLS } from '../lib/plan/levels';
 import { getSelectedWallIds } from '../lib/geometry/selection';
 import {
   computeEnclosedAreasFromWalls,
@@ -7,7 +8,10 @@ import {
 } from '../lib/geometry/enclosedArea';
 
 export function FloorPlanPanelTips() {
-  const walls = useFloorPlanStore((s) => s.walls);
+  const walls = useFloorPlanStore((s) => {
+    const level = s.levels.find((l) => l.id === s.activeLevelId);
+    return level?.walls ?? EMPTY_WALLS;
+  });
   const selection = useFloorPlanStore((s) => s.selection);
   const scale = useFloorPlanStore((s) => s.scale);
   const scaleDraft = useFloorPlanStore((s) => s.scaleDraft);

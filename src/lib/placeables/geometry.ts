@@ -130,13 +130,13 @@ export function snapPlaceablePosition(
   };
 
   for (const wall of walls) {
-    for (const vertex of wallFootprintPolygon(wall)) {
+    for (const vertex of wallFootprintPolygon(wall, walls)) {
       for (const corner of corners) {
         considerSnap(corner, vertex);
       }
     }
 
-    for (const [edgeStart, edgeEnd] of wallFaceEdgeSegments(wall)) {
+    for (const [edgeStart, edgeEnd] of wallFaceEdgeSegments(wall, walls)) {
       for (const corner of corners) {
         const proj = projectPointOnSegment(corner, edgeStart, edgeEnd);
         considerSnap(corner, proj.point);

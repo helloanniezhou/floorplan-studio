@@ -1,4 +1,5 @@
 import type { FloorPlan } from '../../types/floorPlan';
+import { allLevelWalls } from '../plan/levels';
 import {
   listFullProjects,
   migrateLegacyLocalStorage,
@@ -37,9 +38,9 @@ export async function collectLocalBrowserProjects(
 }
 
 export function hasMeaningfulPlan(plan: FloorPlan): boolean {
+  const levels = plan.levels ?? [];
   return (
-    plan.walls.length > 0 ||
-    plan.openings.length > 0 ||
+    allLevelWalls(levels).length > 0 ||
     plan.furniture.length > 0 ||
     plan.landscape.length > 0 ||
     Boolean(plan.backgroundImage)

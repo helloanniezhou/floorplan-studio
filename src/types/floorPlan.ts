@@ -57,6 +57,29 @@ export type LotSize = {
   depth: number;
 };
 
+export type PlanLevelKind = 'floor' | 'roof';
+
+export type PlanLevel = {
+  id: string;
+  name: string;
+  kind: PlanLevelKind;
+  walls: Wall[];
+  openings: Opening[];
+  lights: LightFixture[];
+};
+
+export type LightKind = 'ceiling' | 'pendant' | 'recessed' | 'wall' | 'outdoor';
+
+export type LightFixture = {
+  id: string;
+  position: Point;
+  kind: LightKind;
+  /** Relative brightness 0–1 */
+  intensity: number;
+  /** Mount height in plan units (m or ft) */
+  height: number;
+};
+
 export type Tool =
   | 'select'
   | 'wall'
@@ -65,7 +88,8 @@ export type Tool =
   | 'window'
   | 'scale'
   | 'pan'
-  | 'place';
+  | 'place'
+  | 'light';
 
 export type PlaceableDimensions = {
   width: number;
@@ -129,8 +153,8 @@ export type LandscapeElement = PlacedItemBase & {
 };
 
 export type FloorPlan = {
-  walls: Wall[];
-  openings: Opening[];
+  /** Floor plans (max 3) plus optional roof level — each with its own 2D layout */
+  levels: PlanLevel[];
   furniture: Furniture[];
   landscape: LandscapeElement[];
   unit: FloorPlanUnit;
@@ -154,6 +178,7 @@ export type Selection =
   | { type: 'opening'; id: string }
   | { type: 'furniture'; id: string }
   | { type: 'landscape'; id: string }
+  | { type: 'light'; id: string }
   | null;
 
 export const DEFAULT_TRACE_PARAMS: TraceParams = {
@@ -176,3 +201,15 @@ export const DEFAULT_DOOR_HEIGHT_M = 2.1;
 export const DEFAULT_WINDOW_WIDTH_M = 1.2;
 export const DEFAULT_WINDOW_HEIGHT_M = 1.2;
 export const DEFAULT_WINDOW_SILL_M = 0.9;
+
+export const DEFAULT_LIGHT_INTENSITY = 0.85;
+export const DEFAULT_CEILING_LIGHT_HEIGHT_M = 2.4;
+export const DEFAULT_OUTDOOR_LIGHT_HEIGHT_M = 2.8;
+
+export const LIGHT_KIND_LABELS: Record<LightKind, string> = {
+  ceiling: 'Ceiling',
+  pendant: 'Pendant',
+  recessed: 'Recessed',
+  wall: 'Wall sconce',
+  outdoor: 'Outdoor',
+};

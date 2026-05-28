@@ -16,23 +16,21 @@ export function unitConversionFactor(from: 'm' | 'ft', to: 'm' | 'ft'): number {
   return from === 'ft' ? feetToMeters(1) : metersToFeet(1);
 }
 
+export type PlanMeasurements = {
+  walls: Wall[];
+  openings: Opening[];
+  wallHeight: number;
+  scale: ScaleInfo | null;
+  lotSize: FloorPlan['lotSize'];
+  gridSize: number;
+  backgroundOffset: Point;
+};
+
 export function convertPlanToUnit(
-  plan: Pick<
-    FloorPlan,
-    | 'walls'
-    | 'openings'
-    | 'wallHeight'
-    | 'scale'
-    | 'lotSize'
-    | 'gridSize'
-    | 'backgroundOffset'
-  >,
+  plan: PlanMeasurements,
   from: 'm' | 'ft',
   to: 'm' | 'ft',
-): Pick<
-  FloorPlan,
-  'walls' | 'openings' | 'wallHeight' | 'scale' | 'lotSize' | 'gridSize' | 'backgroundOffset'
-> {
+): PlanMeasurements {
   const factor = unitConversionFactor(from, to);
   if (factor === 1) return plan;
 

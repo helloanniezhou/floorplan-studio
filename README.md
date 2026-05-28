@@ -1,120 +1,124 @@
-# Floor Plan Studio
+# Dreamome
 
-Browser-based interior floor plan editor. Upload a plan photo, auto-detect walls with OpenCV.js, refine them with snap-enabled drawing tools, add doors and windows, and preview an extruded 3D model with Three.js.
+**Turn a photo or sketch into a measured floor plan — in your browser, in minutes.**
 
-## Features
+Upload a plan image, trace walls with snap-to-grid tools, drop in doors, furniture, and landscape, design a separate roof layout and lighting, then spin up a live 3D preview. No install. No CAD degree.
 
-- **Upload floor plan images** (JPG, PNG) as a tracing background
-- **Scale calibration** from a known wall length
-- **Wall tool** with endpoint/midpoint/grid snap, orthogonal constraint (Shift), and typed lengths (Enter)
-- **Doors and windows** placed on walls with editable dimensions
-- **Indoor furniture** (counter, sink, toilet, sofa, table, chairs, range, fridge) with editable dimensions
-- **Outdoor landscape** (trees, shrubs, beds, patio, path, lawn, pool) with editable dimensions
-- **Live 3D preview** with mitered wall corners and opening cuts
-- **Project persistence** in browser IndexedDB or Supabase (when logged in)
-- **Google OAuth login** (Supabase Auth)
-- **Projects page** for account-level project management
+---
 
-## Quick start
+## Why it exists
+
+Most floor plan tools are either too heavy (full CAD) or too dumb (static image markup). Dreamome sits in the middle: **fast enough for real projects**, **visual enough to feel the space**, and **light enough to run entirely in the browser**.
+
+Built for homeowners, interior designers, and anyone who needs a quick, editable layout — not a construction document set.
+
+---
+
+## What you can do
+
+| | |
+|---|---|
+| 📐 **Trace over any plan** | Upload JPG/PNG, set scale from a known wall, draw on top |
+| 🧱 **Walls that behave** | Snap to grid & corners, Shift for 90°, type exact lengths |
+| 🚪 **Doors & windows** | Place on walls, edit width, swing, sill height |
+| 🏠 **Roof plan** | Separate 2D layout from the first floor, with ghost overlay for alignment |
+| 💡 **Lighting** | Place ceiling, pendant, recessed, wall, and outdoor fixtures; preview in 3D |
+| 🛋️ **Furniture & yard** | Counters, beds, trees, patios — resize and rotate in Properties |
+| 🏡 **Lot boundary** | Set property dimensions and see the outline on canvas |
+| 🌅 **Sun & north** | Compass orientation and time-of-day lighting in 3D |
+| 👁️ **Instant 3D** | Extruded walls with openings — double-click to orbit |
+| ☁️ **Your projects, saved** | Browser storage by default; optional Google sign-in + cloud sync |
+
+**Bonus:** optional OpenCV wall detection on uploaded images (best on clear line drawings).
+
+---
+
+## How it works
+
+1. **Open a project** — start fresh or pick one from your Dreamome home screen  
+2. **Upload a plan** — Settings → **Plan image** → upload & set scale  
+3. **Draw the layout** — walls, openings, furniture from the left toolbar  
+4. **Roof & lights** — switch to **Roof plan** for the roof outline; use **Lighting** for fixtures  
+5. **Tune the plan** — lot size, grid spacing, and scale in **Properties** when nothing is selected  
+6. **Preview in 3D** — one click, orbit around the model  
+
+---
+
+## Try it locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173
+Open [http://localhost:5173](http://localhost:5173)
 
-## Workflow
-
-1. **Upload plan** — click *Upload plan* in the top action bar
-2. **Set scale** — select the Scale tool, click two points on a wall with a known length, enter the real-world measurement
-3. **Draw walls** — use the Wall tool; hold Shift for 45°/90° constraints; type a length and press Enter to fix the endpoint
-4. **Add openings** — Door/Window tools: click on a wall
-5. **Place furniture & landscape** — pick an item in the left sidebar, then click the canvas
-6. **Edit dimensions** — select any item; the Properties panel shows width, depth, and height
-7. **3D preview** — updates automatically in the right panel
-
-Uploaded plan images are hidden by default. Turn on *Show image* in the action bar if you want the photo visible while tracing.
-
-## Supabase setup (Google OAuth + cloud projects)
-
-Cloud save requires the `public.projects` table. If save shows **Save failed** or mentions the table is missing, run the database setup below.
-
-### 1. Environment variables
-
-Copy `.env.example` to `.env` and set keys from [Supabase → Project Settings → API](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/settings/api):
-
-```bash
-cp .env.example .env
-```
-
-On Vercel, add the same `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` (or legacy anon key) under **Environment Variables**.
-
-### 2. Create the database table (required once)
-
-**Option A — Supabase CLI (recommended)**
-
-```bash
-# One-time: https://supabase.com/dashboard/account/tokens
-export SUPABASE_ACCESS_TOKEN=your_token
-# Or: npx supabase login
-
-npx supabase link --project-ref zqktwmikwmaicooawquc
-npm run db:push
-```
-
-`db:push` applies migrations from `supabase/migrations/` (including `projects` table + RLS).
-
-**Option B — SQL Editor**
-
-Paste [`supabase/setup.sql`](supabase/setup.sql) into [SQL Editor](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/sql/new) and run.
-
-### 3. Auth
-
-In [Auth → Providers](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/auth/providers), enable **Google** and add your site URL (e.g. `http://localhost:5173` and your Vercel URL) under **Redirect URLs**.
-
-When signed in, plans autosave to Supabase. When signed out, plans stay in the browser (IndexedDB).
-
-## Stack
-
-- React 19 + TypeScript + Vite
-- react-konva (2D editor)
-- Zustand (state + autosave)
-- Supabase (Auth + Postgres JSON storage)
-- OpenCV.js (lazy-loaded from CDN for tracing)
-- Three.js + React Three Fiber (3D viewer)
-
-## Deploy
-
-Static SPA (Vite → `dist/`). Production build:
+Production build:
 
 ```bash
 npm run build
 ```
 
-### Vercel
+---
 
-**Project:** [floorplan-studio](https://vercel.com/annies-projects-cc2c2b72/floorplan-studio) (`annies-projects-cc2c2b72`)
+## Keyboard shortcuts
 
-**Repository:** [helloanniezhou/floorplan-studio](https://github.com/helloanniezhou/floorplan-studio) — `main` has the latest app code.
+| Key | Action |
+|-----|--------|
+| `V` | Select |
+| `W` | Wall |
+| `R` | Rectangle |
+| `K` | Scale |
+| `L` | Light |
+| `⌘Z` / `⌘⇧Z` | Undo / Redo |
 
-If the project shows **Connect Git** (no production deployment yet):
+More tools are in the left sidebar with shortcut hints.
 
-1. Open [Git settings](https://vercel.com/annies-projects-cc2c2b72/floorplan-studio/settings/git) for the project.
-2. Connect **GitHub** and select `helloanniezhou/floorplan-studio`.
-3. Set **Production Branch** to `main`.
-4. Confirm build settings: framework **Vite**, command `npm run build`, output `dist` (`vercel.json` handles SPA routing).
-5. Save — Vercel runs the first production deploy from `main`.
+---
 
-After Git is connected, every push to `main` triggers a new production deployment automatically.
+## Cloud save (optional)
 
-## Limitations (v1)
+Sign in with **Google** to sync projects to Supabase. Without an account, everything stays in **IndexedDB** in your browser.
 
-- OpenCV detection works best on high-contrast line drawings; photos may need manual cleanup
-- Cloud sync requires Supabase env vars and auth setup
-- No PDF/SVG export yet
-- 3D uses simplified opening cuts (not full CSG)
+### Quick Supabase setup
+
+1. Copy env vars: `cp .env.example .env`  
+2. Apply schema: `npm run db:push` (after `npx supabase link`)  
+   — or run [`supabase/setup.sql`](supabase/setup.sql) in the SQL Editor  
+3. Enable **Google** under Auth → Providers and add your redirect URLs  
+
+Details: [Supabase API settings](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/settings/api) · [Auth providers](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/auth/providers)
+
+---
+
+## Stack
+
+React 19 · TypeScript · Vite · react-konva · Zustand · Three.js · Supabase · OpenCV.js (tracing)
+
+---
+
+## Deploy
+
+Static SPA → `dist/`. Works on Vercel out of the box (`vercel.json` included).
+
+Repo: [helloanniezhou/floorplan-studio](https://github.com/helloanniezhou/floorplan-studio)
+
+---
+
+## Roadmap / known limits (v1)
+
+- Wall detection works best on high-contrast drawings; photos often need manual cleanup  
+- PDF export covers the first-floor plan view  
+- 3D uses simplified opening cuts (not full boolean CSG)  
+
+---
 
 ## License
 
 MIT
+
+---
+
+<p align="center">
+  <strong>Made for people who want a floor plan, not a software project.</strong>
+</p>

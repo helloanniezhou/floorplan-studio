@@ -20,7 +20,7 @@ function App() {
   useToolShortcuts();
   useProjectPersistence();
   const auth = useSupabaseAuth();
-  const [projectsView, setProjectsView] = useState(hasPostLoginProjectsIntent);
+  const [projectsView, setProjectsView] = useState(true);
   const show3DPreview = useFloorPlanStore((s) => s.show3DPreview);
 
   useEffect(() => {
@@ -52,10 +52,10 @@ function App() {
       <header className="app-action-bar-wrap">
         <ActionBar onBackToProjects={() => setProjectsView(true)} />
       </header>
-      <div className="app-panels">
-        <Toolbar />
+      <div className={`app-panels ${show3DPreview ? 'app-panels--3d' : ''}`}>
+        {!show3DPreview && <Toolbar />}
         <div className="main-column">
-          <main className="workspace">
+          <main className={`workspace ${show3DPreview ? 'workspace--3d' : ''}`}>
             {!show3DPreview && (
               <div className="workspace-overlay">
                 <ScaleDialog />
@@ -70,7 +70,7 @@ function App() {
             )}
           </main>
         </div>
-        <PropertyPanel />
+        {!show3DPreview && <PropertyPanel />}
       </div>
     </div>
   );

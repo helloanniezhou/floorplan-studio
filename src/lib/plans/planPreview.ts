@@ -1,4 +1,5 @@
 import type { FloorPlan, PlacedItemBase, Point } from '../../types/floorPlan';
+import { allLevelWalls } from '../plan/levels';
 import { getLocalPlanBackground } from '../storage/planBackgroundStorage';
 
 const PREVIEW_WIDTH = 400;
@@ -7,7 +8,7 @@ const PADDING = 16;
 
 function collectPoints(plan: FloorPlan): Point[] {
   const points: Point[] = [];
-  for (const wall of plan.walls) {
+  for (const wall of allLevelWalls(plan.levels ?? [])) {
     points.push(wall.start, wall.end);
   }
   for (const item of [...plan.furniture, ...plan.landscape]) {
@@ -28,7 +29,12 @@ function placeableBounds(item: PlacedItemBase): Point[] {
 
 /** Rasterize walls and placeables when no background image is available. */
 export function renderPlanPreviewDataUrl(plan: FloorPlan): string | null {
-  if (plan.walls.length === 0 && plan.furniture.length === 0 && plan.landscape.length === 0) {
+  const levels = plan.levels ?? [];
+  if (
+    allLevelWalls(levels).length === 0 &&
+    plan.furniture.length === 0 &&
+    plan.landscape.length === 0
+  ) {
     return null;
   }
 
@@ -80,7 +86,7 @@ export function renderPlanPreviewDataUrl(plan: FloorPlan): string | null {
 
   ctx.strokeStyle = '#1c1917';
   ctx.lineCap = 'round';
-  for (const wall of plan.walls) {
+  for (const wall of allLevelWalls(levels)) {
     const s = toCanvas(wall.start);
     const e = toCanvas(wall.end);
     ctx.lineWidth = Math.max(2, wall.thickness * scale * 0.5);

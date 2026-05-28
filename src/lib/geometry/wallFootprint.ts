@@ -1,29 +1,38 @@
 import type { Point } from '../../types/floorPlan';
-import { add, normalize, perpendicular, scale, subtract } from './vectors';
+import { buildWallPolygon, squareWallPolygon } from '../walls3d/miter';
 
-/** Closed polygon for 2D plan view (centerline wall with thickness). */
-export function wallFootprintPolygon(wall: {
+type WallShape = {
+  id?: string;
   start: Point;
   end: Point;
   thickness: number;
-}): Point[] {
-  const half = wall.thickness / 2;
-  const dir = normalize(subtract(wall.end, wall.start));
-  const n = perpendicular(dir);
-  const p1 = add(wall.start, scale(n, half));
-  const p2 = add(wall.end, scale(n, half));
-  const p3 = add(wall.end, scale(n, -half));
-  const p4 = add(wall.start, scale(n, -half));
-  return [p1, p2, p3, p4];
+};
+
+/** Closed polygon for 2D plan / 3D extrusion (mitered at joints when `allWalls` is passed). */
+export function wallFootprintPolygon(
+  wall: WallShape,
+  allWalls?: WallShape[],
+): Point[] {
+  if (allWalls && allWalls.length > 0 && wall.id) {
+    return buildWallPolygon(
+      { id: wall.id, start: wall.start, end: wall.end, thickness: wall.thickness },
+      allWalls.map((w) => ({
+        id: w.id ?? '',
+        start: w.start,
+        end: w.end,
+        thickness: w.thickness,
+      })),
+    );
+  }
+  return squareWallPolygon(wall);
 }
 
 /** The two long faces of the wall (outer edges parallel to the wall run). */
-export function wallFaceEdgeSegments(wall: {
-  start: Point;
-  end: Point;
-  thickness: number;
-}): [Point, Point][] {
-  const [p1, p2, p3, p4] = wallFootprintPolygon(wall);
+export function wallFaceEdgeSegments(
+  wall: WallShape,
+  allWalls?: WallShape[],
+): [Point, Point][] {
+  const [p1, p2, p3, p4] = wallFootprintPolygon(wall, allWalls);
   return [
     [p1, p2],
     [p4, p3],

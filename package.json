@@ -17,6 +17,7 @@
     "@react-three/fiber": "^9.6.1",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.2",
+    "jspdf": "^4.2.1",
     "konva": "^10.3.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

@@ -53,6 +53,14 @@ import { boundsFromWalls } from '../lib/walls3d/miter';
 import { PlanCompassRose } from './PlanCompassRose';
 import { PlanLotBoundary } from './PlanLotBoundary';
 import { FloorPlanPanelTips } from './FloorPlanPanelTips';
+import { LightShapes, getLightAtPoint } from './LightShapes';
+import {
+  useActiveLayoutGeometry,
+  useActiveLevel,
+  useGhostWalls,
+} from '../hooks/useActiveLayoutGeometry';
+import { isGroundFloorLevel } from '../lib/plan/levels';
+import { LIGHT_KIND_LABELS } from '../lib/lights/defaults';
 import { findOpeningAtPoint } from '../lib/openings/openingHitTest';
 import { getDoorSymbolGeometry } from '../lib/openings/doorSymbol';
 
@@ -88,8 +96,13 @@ export function FloorPlanCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
 
-  const walls = useFloorPlanStore((s) => s.walls);
-  const openings = useFloorPlanStore((s) => s.openings);
+  const levels = useFloorPlanStore((s) => s.levels);
+  const activeLevel = useActiveLevel();
+  const activeLevelId = activeLevel?.id ?? '';
+  const { walls, openings, lights } = useActiveLayoutGeometry();
+  const ghostWalls = useGhostWalls();
+  const isGroundFloor =
+    activeLevelId.length > 0 && isGroundFloorLevel(levels, activeLevelId);
   const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
   const landscape = useFloorPlanStore((s) => s.landscape) ?? [];
   const activePlaceable = useFloorPlanStore((s) => s.activePlaceable);
@@ -119,6 +132,9 @@ export function FloorPlanCanvas() {
   const setScaleDraftPoint = useFloorPlanStore((s) => s.setScaleDraftPoint);
   const addOpening = useFloorPlanStore((s) => s.addOpening);
   const placeActiveItem = useFloorPlanStore((s) => s.placeActiveItem);
+  const placeActiveLight = useFloorPlanStore((s) => s.placeActiveLight);
+  const updateLight = useFloorPlanStore((s) => s.updateLight);
+  const activeLightKind = useFloorPlanStore((s) => s.activeLightKind);
   const updateFurniture = useFloorPlanStore((s) => s.updateFurniture);
   const updateLandscape = useFloorPlanStore((s) => s.updateLandscape);
   const updateOpening = useFloorPlanStore((s) => s.updateOpening);
@@ -163,6 +179,7 @@ export function FloorPlanCanvas() {
         handle: PlaceableResizeHandle;
       }
     | { kind: 'opening'; id: string; grabAlongOffset: number }
+    | { kind: 'light'; id: string; grabOffset: Point }
   >(null);
 
   const translateSnapshot = useRef<Map<string, { start: Point; end: Point }>>(new Map());
@@ -376,7 +393,14 @@ export function FloorPlanCanvas() {
     }
 
     if (tool === 'place') {
-      placeActiveItem(screenToWorld(pos.x, pos.y));
+      if (isGroundFloor) {
+        placeActiveItem(screenToWorld(pos.x, pos.y));
+      }
+      return;
+    }
+
+    if (tool === 'light') {
+      placeActiveLight(world);
       return;
     }
 
@@ -447,7 +471,21 @@ export function FloorPlanCanvas() {
         }
       }
 
-      const placeableHit = getPlaceableAtPoint(world, furniture, landscape);
+      const lightRadius = (SNAP_RADIUS / stageScale) / (ppu ?? 1);
+      const lightHit = getLightAtPoint(world, lights, lightRadius);
+      if (lightHit) {
+        setSelection({ type: 'light', id: lightHit.id });
+        recordHistory();
+        setDragging({
+          kind: 'light',
+          id: lightHit.id,
+          grabOffset: subtract(world, lightHit.position),
+        });
+        return;
+      }
+
+      const placeableHit =
+        isGroundFloor ? getPlaceableAtPoint(world, furniture, landscape) : null;
       if (placeableHit) {
         const item =
           placeableHit.type === 'furniture'
@@ -681,6 +719,12 @@ export function FloorPlanCanvas() {
       return;
     }
 
+    if (dragging?.kind === 'light') {
+      const nextPosition = subtract(world, dragging.grabOffset);
+      updateLight(dragging.id, { position: nextPosition }, { recordHistory: false });
+      return;
+    }
+
     if (dragging?.kind === 'placeable') {
       const rawCenter = subtract(world, dragging.grabOffset);
       const item =
@@ -792,12 +836,13 @@ export function FloorPlanCanvas() {
           cursor:
             tool === 'pan' || spaceDown
               ? 'grab'
-              : tool === 'place'
+              : tool === 'place' || tool === 'light'
                 ? 'copy'
                 : tool === 'select'
                   ? dragging?.kind === 'translate' ||
                       dragging?.kind === 'placeable' ||
-                      dragging?.kind === 'opening'
+                      dragging?.kind === 'opening' ||
+                      dragging?.kind === 'light'
                     ? 'move'
                     : dragging?.kind === 'placeable-resize'
                       ? 'nwse-resize'
@@ -867,6 +912,24 @@ export function FloorPlanCanvas() {
             />
           ))}
 
+          {ghostWalls.length > 0 &&
+            ghostWalls.map((wall) => {
+              const footprint = wallFootprintPolygon(wall, ghostWalls);
+              const pts = footprintToDisplayPoints(footprint, ppu);
+              return (
+                <Line
+                  key={`ghost-${wall.id}`}
+                  points={pts}
+                  closed
+                  fill="rgba(148, 163, 184, 0.12)"
+                  stroke="rgba(100, 116, 139, 0.45)"
+                  strokeWidth={1 / stageScale}
+                  dash={[6 / stageScale, 5 / stageScale]}
+                  listening={false}
+                />
+              );
+            })}
+
           {walls.map((wall) => {
             const selected = isWallSelected(selection, wall.id);
             const showEndpoints =
@@ -878,7 +941,7 @@ export function FloorPlanCanvas() {
               showEndpoints && selection.focus?.id === wall.id
                 ? selection.focus.anchor
                 : null;
-            const footprint = wallFootprintPolygon(wall);
+            const footprint = wallFootprintPolygon(wall, walls);
             const pts = footprintToDisplayPoints(footprint, ppu);
             const s = toDisplay(wall.start, ppu);
             const e = toDisplay(wall.end, ppu);
@@ -976,18 +1039,28 @@ export function FloorPlanCanvas() {
             />
           )}
 
-          <PlaceableShapes
-            furniture={furniture}
-            landscape={landscape}
-            selection={
-              selection?.type === 'furniture' || selection?.type === 'landscape'
-                ? selection
-                : null
-            }
+          {isGroundFloor && (
+            <PlaceableShapes
+              furniture={furniture}
+              landscape={landscape}
+              selection={
+                selection?.type === 'furniture' || selection?.type === 'landscape'
+                  ? selection
+                  : null
+              }
+              toDisplay={(p) => toDisplay(p, ppu)}
+              stageScale={stageScale}
+              onSelectFurniture={(id) => setSelection({ type: 'furniture', id })}
+              onSelectLandscape={(id) => setSelection({ type: 'landscape', id })}
+            />
+          )}
+
+          <LightShapes
+            lights={lights}
+            selection={selection}
             toDisplay={(p) => toDisplay(p, ppu)}
             stageScale={stageScale}
-            onSelectFurniture={(id) => setSelection({ type: 'furniture', id })}
-            onSelectLandscape={(id) => setSelection({ type: 'landscape', id })}
+            onSelect={(id) => setSelection({ type: 'light', id })}
           />
 
           {openings.map((opening) => {
@@ -1195,13 +1268,20 @@ export function FloorPlanCanvas() {
         </Layer>
       </Stage>
 
-      {tool === 'place' && (
+      {tool === 'place' && isGroundFloor && (
         <div className="length-input-bar place-hint">
           Click to place{' '}
           {activePlaceable.category === 'furniture'
             ? FURNITURE_LABELS[activePlaceable.kind]
             : LANDSCAPE_LABELS[activePlaceable.kind]}
           . Select it afterward to edit dimensions.
+        </div>
+      )}
+
+      {tool === 'light' && (
+        <div className="length-input-bar place-hint">
+          Click to place {LIGHT_KIND_LABELS[activeLightKind]} light. Select to adjust brightness
+          and height.
         </div>
       )}
 

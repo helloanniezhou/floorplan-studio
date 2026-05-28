@@ -14,6 +14,7 @@ type MeshProps = {
   rotation: number;
   color: string;
   centerY: number;
+  photoMode: boolean;
 };
 
 function PlaceableBoxMesh({
@@ -24,6 +25,7 @@ function PlaceableBoxMesh({
   rotation,
   color,
   centerY,
+  photoMode,
 }: MeshProps) {
   return (
     <mesh
@@ -33,7 +35,7 @@ function PlaceableBoxMesh({
       receiveShadow
     >
       <boxGeometry args={[width, height, depth]} />
-      <meshStandardMaterial color={color} roughness={0.7} />
+      <meshStandardMaterial color={color} roughness={photoMode ? 0.52 : 0.7} />
     </mesh>
   );
 }
@@ -46,6 +48,7 @@ function OvalLandscapeMesh({
   height,
   rotation,
   color,
+  photoMode,
 }: Omit<MeshProps, 'centerY'>) {
   return (
     <mesh
@@ -56,7 +59,7 @@ function OvalLandscapeMesh({
       receiveShadow
     >
       <sphereGeometry args={[1, 20, 14]} />
-      <meshStandardMaterial color={color} roughness={0.85} />
+      <meshStandardMaterial color={color} roughness={photoMode ? 0.72 : 0.85} />
     </mesh>
   );
 }
@@ -64,9 +67,11 @@ function OvalLandscapeMesh({
 export function FurnitureMeshes({
   items,
   wallHeight,
+  photoMode = false,
 }: {
   items: Furniture[];
   wallHeight: number;
+  photoMode?: boolean;
 }) {
   return (
     <>
@@ -80,13 +85,20 @@ export function FurnitureMeshes({
           rotation={item.rotation}
           color={FURNITURE_COLORS[item.kind]}
           centerY={furnitureMeshCenterY(item, wallHeight)}
+          photoMode={photoMode}
         />
       ))}
     </>
   );
 }
 
-export function LandscapeMeshes({ items }: { items: LandscapeElement[] }) {
+export function LandscapeMeshes({
+  items,
+  photoMode = false,
+}: {
+  items: LandscapeElement[];
+  photoMode?: boolean;
+}) {
   return (
     <>
       {items.map((item) => {
@@ -99,10 +111,15 @@ export function LandscapeMeshes({ items }: { items: LandscapeElement[] }) {
           color: LANDSCAPE_COLORS[item.kind],
         };
         if (isOvalLandscapeKind(item.kind)) {
-          return <OvalLandscapeMesh key={item.id} {...props} />;
+          return <OvalLandscapeMesh key={item.id} {...props} photoMode={photoMode} />;
         }
         return (
-          <PlaceableBoxMesh key={item.id} {...props} centerY={item.height / 2} />
+          <PlaceableBoxMesh
+            key={item.id}
+            {...props}
+            centerY={item.height / 2}
+            photoMode={photoMode}
+          />
         );
       })}
     </>

@@ -39,8 +39,7 @@ export function clearCloudMigrationMarker(userId: string): void {
 
 function planFingerprint(plan: FloorPlan): string {
   return JSON.stringify({
-    walls: plan.walls,
-    openings: plan.openings,
+    levels: plan.levels,
     furniture: plan.furniture,
     landscape: plan.landscape,
     unit: plan.unit,
@@ -78,7 +77,7 @@ export function useProjectPersistence() {
       id: state.projectId,
       name: state.projectName,
       exportPlan: () => state.exportPlan(),
-      wallCount: state.walls.length,
+      wallCount: state.levels.find((l) => l.kind === 'floor')?.walls.length ?? 0,
     });
   }, []);
 
@@ -370,8 +369,7 @@ export function useProjectPersistence() {
 
     const unsub = useFloorPlanStore.subscribe((state, prev) => {
       const fields: (keyof typeof state)[] = [
-        'walls',
-        'openings',
+        'levels',
         'furniture',
         'landscape',
         'unit',

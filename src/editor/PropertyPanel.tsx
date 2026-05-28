@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
+import { useActiveLayoutGeometry } from '../hooks/useActiveLayoutGeometry';
+import { LIGHT_KIND_LABELS } from '../lib/lights/defaults';
 import { getSelectedWallIds } from '../lib/geometry/selection';
 import { formatLength, wallLength } from '../lib/geometry/vectors';
 import {
@@ -42,8 +44,7 @@ export function PropertyPanel() {
     setGridSizeDraft(String(gridSize));
   }, [gridSize]);
   const setTool = useFloorPlanStore((s) => s.setTool);
-  const walls = useFloorPlanStore((s) => s.walls);
-  const openings = useFloorPlanStore((s) => s.openings);
+  const { walls, openings, lights } = useActiveLayoutGeometry();
   const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
   const landscape = useFloorPlanStore((s) => s.landscape) ?? [];
   const unit = useFloorPlanStore((s) => s.unit);
@@ -58,6 +59,8 @@ export function PropertyPanel() {
   const deleteFurniture = useFloorPlanStore((s) => s.deleteFurniture);
   const updateLandscape = useFloorPlanStore((s) => s.updateLandscape);
   const deleteLandscape = useFloorPlanStore((s) => s.deleteLandscape);
+  const updateLight = useFloorPlanStore((s) => s.updateLight);
+  const deleteLight = useFloorPlanStore((s) => s.deleteLight);
 
   const patchFurnitureSize = (
     item: Furniture,
@@ -108,6 +111,10 @@ export function PropertyPanel() {
   const selectedLandscape =
     selection?.type === 'landscape'
       ? landscape.find((l) => l.id === selection.id)
+      : null;
+  const selectedLight =
+    selection?.type === 'light'
+      ? lights.find((l) => l.id === selection.id)
       : null;
 
   const selectedPlaceable = selectedFurniture ?? selectedLandscape;
@@ -615,6 +622,80 @@ export function PropertyPanel() {
             }}
           >
             Delete item
+          </button>
+        </div>
+      )}
+
+      {selectedLight && (
+        <div className="panel-block">
+          <h3>Light</h3>
+          <p className="readout">{LIGHT_KIND_LABELS[selectedLight.kind]}</p>
+          <label className="field">
+            <span>Brightness</span>
+            <input
+              type="range"
+              min={0.1}
+              max={1}
+              step={0.05}
+              value={selectedLight.intensity}
+              onChange={(e) =>
+                updateLight(selectedLight.id, { intensity: Number(e.target.value) })
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Height ({unit})</span>
+            <input
+              type="number"
+              min={0.1}
+              step={0.05}
+              value={Number(selectedLight.height.toFixed(2))}
+              onChange={(e) =>
+                updateLight(selectedLight.id, {
+                  height: Math.max(0.1, Number(e.target.value) || 0),
+                })
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Position X ({unit})</span>
+            <input
+              type="number"
+              step={0.05}
+              value={Number(selectedLight.position.x.toFixed(3))}
+              onChange={(e) =>
+                updateLight(selectedLight.id, {
+                  position: {
+                    ...selectedLight.position,
+                    x: Number(e.target.value) || 0,
+                  },
+                })
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Position Y ({unit})</span>
+            <input
+              type="number"
+              step={0.05}
+              value={Number(selectedLight.position.y.toFixed(3))}
+              onChange={(e) =>
+                updateLight(selectedLight.id, {
+                  position: {
+                    ...selectedLight.position,
+                    y: Number(e.target.value) || 0,
+                  },
+                })
+              }
+            />
+          </label>
+          <p className="hint">Delete or Backspace removes this fixture.</p>
+          <button
+            type="button"
+            className="toolbar-btn danger"
+            onClick={() => deleteLight(selectedLight.id)}
+          >
+            Delete light
           </button>
         </div>
       )}
