@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SavedProjectMeta } from '../lib/storage/projectStorage';
 import { getProjectPreviewUrl } from '../lib/plans/planPreview';
 import { useProjectPersistence } from '../hooks/useProjectPersistence';
@@ -8,6 +8,15 @@ type PreviewState = {
   src: string | null;
   loading: boolean;
 };
+
+function ProjectsBrand() {
+  return (
+    <div className="projects-brand-lockup">
+      <img src="/favicon.svg" alt="" className="projects-brand-logo" aria-hidden />
+      <h1 className="projects-brand">Dreamore</h1>
+    </div>
+  );
+}
 
 export function ProjectsPage({
   onProjectOpened,
@@ -52,11 +61,6 @@ export function ProjectsPage({
       })
       .finally(() => setLoading(false));
   };
-
-  const userLabel = useMemo(
-    () => user?.email ?? user?.user_metadata?.full_name ?? 'Signed in account',
-    [user],
-  );
 
   useEffect(() => {
     if (authEnabled && authLoading) {
@@ -113,7 +117,7 @@ export function ProjectsPage({
     return (
       <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
         <header className="projects-header">
-          <h1 className="projects-brand">Dreamome</h1>
+          <ProjectsBrand />
         </header>
         <p className="muted">Checking login…</p>
       </section>
@@ -124,7 +128,7 @@ export function ProjectsPage({
     return (
       <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
         <header className="projects-header">
-          <h1 className="projects-brand">Dreamome</h1>
+          <ProjectsBrand />
         </header>
         <div className="projects-empty">
           <p>Sign in with Google to manage projects for your account in Supabase.</p>
@@ -162,12 +166,18 @@ export function ProjectsPage({
     return (
       <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
         <header className="projects-header">
-          <h1 className="projects-brand">Dreamome</h1>
+          <ProjectsBrand />
         </header>
         <div className="projects-empty">
           <p className="muted">
-            Supabase is not configured in this build. Add <code>VITE_SUPABASE_URL</code> and{' '}
-            <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to your <code>.env</code> file.
+            Supabase is not configured in this build. Set <code>VITE_SUPABASE_URL</code> and{' '}
+            <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> in your local <code>.env</code>, or in{' '}
+            <strong>Vercel → Project → Settings → Environment Variables</strong> (then redeploy).
+            Values come from{' '}
+            <a href="https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/settings/api">
+              Supabase → Settings → API
+            </a>
+            .
           </p>
         </div>
       </section>
@@ -177,23 +187,24 @@ export function ProjectsPage({
   return (
     <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
       <header className="projects-header">
-        <h1 className="projects-brand">Dreamome</h1>
-        <div className="projects-header-actions">
-          <button
-            type="button"
-            className="action-bar-btn"
-            onClick={() => {
-              void createNewProject().then(() => onProjectOpened());
-            }}
-          >
-            New project
-          </button>
-        </div>
-        <div className="projects-account">
-          <span className="projects-account-email">{userLabel}</span>
-          <button type="button" className="action-bar-btn" onClick={() => void signOut()}>
-            Sign out
-          </button>
+        <ProjectsBrand />
+        <div className="projects-header-end">
+          <div className="projects-header-actions">
+            <button
+              type="button"
+              className="action-bar-btn"
+              onClick={() => {
+                void createNewProject().then(() => onProjectOpened());
+              }}
+            >
+              New project
+            </button>
+          </div>
+          <div className="projects-account">
+            <button type="button" className="action-bar-btn" onClick={() => void signOut()}>
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
       {loading && <p className="muted">Loading projects…</p>}

@@ -34,12 +34,21 @@ import {
   LANDSCAPE_LABELS,
 } from '../lib/placeables/defaults';
 import {
+  applyDeltaToFurniture,
   applyDeltaToWalls,
   displayRectToWorldRect,
+  furnitureInWorldRect,
+  getSelectedFurnitureIds,
+  getSelectedLandscapeIds,
+  getSelectedOpeningIds,
   getSelectedWallIds,
+  isOpeningSelected,
   isWallSelected,
+  landscapeInWorldRect,
   normalizeDisplayRect,
   findWallEndpointHit,
+  openingsInWorldRect,
+  selectionFromMarquee,
   wallsInWorldRect,
 } from '../lib/geometry/selection';
 import { snapPlaceablePosition } from '../lib/placeables/geometry';
@@ -67,6 +76,8 @@ import { getDoorSymbolGeometry } from '../lib/openings/doorSymbol';
 const SNAP_RADIUS = 18;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 8;
+/** Screen pixels the pointer must move before a placeable drag starts (click vs drag). */
+const PLACEABLE_DRAG_THRESHOLD_PX = 5;
 
 function toDisplay(p: Point, pixelsPerUnit: number | null): Point {
   if (!pixelsPerUnit) return p;
@@ -76,6 +87,14 @@ function toDisplay(p: Point, pixelsPerUnit: number | null): Point {
 function fromDisplay(p: Point, pixelsPerUnit: number | null): Point {
   if (!pixelsPerUnit) return p;
   return { x: p.x / pixelsPerUnit, y: p.y / pixelsPerUnit };
+}
+
+function konvaPointerId(e?: Konva.KonvaEventObject<MouseEvent>): number {
+  const evt = e?.evt;
+  if (evt && typeof (evt as PointerEvent).pointerId === 'number') {
+    return (evt as PointerEvent).pointerId;
+  }
+  return 1;
 }
 
 function useBackgroundImage(src?: string) {
@@ -128,6 +147,12 @@ export function FloorPlanCanvas() {
   const setSelection = useFloorPlanStore((s) => s.setSelection);
   const setWallSelection = useFloorPlanStore((s) => s.setWallSelection);
   const toggleWallSelection = useFloorPlanStore((s) => s.toggleWallSelection);
+  const setOpeningSelection = useFloorPlanStore((s) => s.setOpeningSelection);
+  const toggleOpeningSelection = useFloorPlanStore((s) => s.toggleOpeningSelection);
+  const setFurnitureSelection = useFloorPlanStore((s) => s.setFurnitureSelection);
+  const toggleFurnitureSelection = useFloorPlanStore((s) => s.toggleFurnitureSelection);
+  const setLandscapeSelection = useFloorPlanStore((s) => s.setLandscapeSelection);
+  const toggleLandscapeSelection = useFloorPlanStore((s) => s.toggleLandscapeSelection);
   const setWallsSilent = useFloorPlanStore((s) => s.setWallsSilent);
   const setScaleDraftPoint = useFloorPlanStore((s) => s.setScaleDraftPoint);
   const addOpening = useFloorPlanStore((s) => s.addOpening);
@@ -171,7 +196,14 @@ export function FloorPlanCanvas() {
     | { kind: 'endpoint'; wallId: string; end: 'start' | 'end' }
     | { kind: 'translate'; wallIds: string[]; startWorld: Point }
     | { kind: 'marquee'; startDisplay: Point; currentDisplay: Point }
-    | { kind: 'placeable'; type: 'furniture' | 'landscape'; id: string; grabOffset: Point }
+    | {
+        kind: 'placeable';
+        type: 'furniture' | 'landscape';
+        id: string;
+        grabOffset: Point;
+        startScreen: Point;
+        activated: boolean;
+      }
     | {
         kind: 'placeable-resize';
         type: 'furniture' | 'landscape';
@@ -182,6 +214,128 @@ export function FloorPlanCanvas() {
     | { kind: 'light'; id: string; grabOffset: Point }
   >(null);
 
+  type DragState = NonNullable<typeof dragging>;
+  const draggingRef = useRef<DragState | null>(null);
+  const pendingPlaceableSelectionRef = useRef<(() => void) | null>(null);
+  const dragMovedRef = useRef(false);
+  const dragPointerIdRef = useRef<number | null>(null);
+  const processDragMoveRef = useRef<(pos: Point) => void>(() => {});
+  const finishDragRef = useRef<() => void>(() => {});
+  const dragWindowListenersRef = useRef<{
+    target: Window | HTMLElement;
+    mode: 'pointer' | 'mouse';
+    onMove: (e: Event) => void;
+    onUp: () => void;
+  } | null>(null);
+
+  const releaseDragPointerCapture = useCallback(() => {
+    const stage = stageRef.current;
+    const pid = dragPointerIdRef.current;
+    if (!stage || pid == null) return;
+    try {
+      const container = stage.container();
+      if (container.hasPointerCapture(pid)) {
+        container.releasePointerCapture(pid);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const detachWindowDragListeners = useCallback(() => {
+    const listeners = dragWindowListenersRef.current;
+    if (!listeners) return;
+    if (listeners.mode === 'pointer') {
+      listeners.target.removeEventListener('pointermove', listeners.onMove);
+      listeners.target.removeEventListener('pointerup', listeners.onUp);
+      listeners.target.removeEventListener('pointercancel', listeners.onUp);
+    } else {
+      listeners.target.removeEventListener('mousemove', listeners.onMove);
+      listeners.target.removeEventListener('mouseup', listeners.onUp);
+    }
+    dragWindowListenersRef.current = null;
+    releaseDragPointerCapture();
+  }, [releaseDragPointerCapture]);
+
+  const attachWindowDragListeners = useCallback(() => {
+    detachWindowDragListeners();
+    const stage = stageRef.current;
+    if (!stage) return;
+    const container = stage.container();
+    const pid = dragPointerIdRef.current;
+
+    if (pid != null) {
+      try {
+        container.setPointerCapture(pid);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const dispatchMove = (clientX: number, clientY: number) => {
+      const rect = container.getBoundingClientRect();
+      processDragMoveRef.current({
+        x: clientX - rect.left,
+        y: clientY - rect.top,
+      });
+    };
+
+    const onMove = (e: Event) => {
+      const drag = draggingRef.current;
+      if (!drag) return;
+      if (pid != null && e instanceof PointerEvent && e.pointerId !== pid) return;
+      if (e instanceof MouseEvent || e instanceof PointerEvent) {
+        dispatchMove(e.clientX, e.clientY);
+      }
+    };
+    const onUp = () => finishDragRef.current();
+
+    if (pid != null) {
+      container.addEventListener('pointermove', onMove);
+      container.addEventListener('pointerup', onUp);
+      container.addEventListener('pointercancel', onUp);
+      dragWindowListenersRef.current = {
+        target: container,
+        mode: 'pointer',
+        onMove,
+        onUp,
+      };
+    } else {
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      dragWindowListenersRef.current = {
+        target: window,
+        mode: 'mouse',
+        onMove,
+        onUp,
+      };
+    }
+  }, [detachWindowDragListeners]);
+
+  const startDrag = useCallback(
+    (state: DragState, pointerId?: number | null) => {
+      draggingRef.current = state;
+      dragMovedRef.current = false;
+      dragPointerIdRef.current = pointerId ?? 1;
+      attachWindowDragListeners();
+      if (state.kind === 'marquee' || state.kind === 'pan') {
+        setDragging(state);
+      } else if (state.kind === 'placeable-resize') {
+        document.body.style.cursor = 'nwse-resize';
+      }
+    },
+    [attachWindowDragListeners],
+  );
+
+  const clearDrag = useCallback(() => {
+    detachWindowDragListeners();
+    document.body.style.cursor = '';
+    draggingRef.current = null;
+    dragPointerIdRef.current = null;
+    pendingPlaceableSelectionRef.current = null;
+    setDragging(null);
+  }, [detachWindowDragListeners]);
+
   const translateSnapshot = useRef<Map<string, { start: Point; end: Point }>>(new Map());
   const translateExtras = useRef<{
     backgroundOffset: Point;
@@ -189,6 +343,7 @@ export function FloorPlanCanvas() {
     furniture: Furniture[];
     landscape: LandscapeElement[];
   } | null>(null);
+  const furnitureTranslateSnapshot = useRef<Map<string, Point>>(new Map());
 
   useEffect(() => {
     const el = containerRef.current;
@@ -228,7 +383,7 @@ export function FloorPlanCanvas() {
         setRectDraftStart(null);
         setPendingLength('');
         setSelection(null);
-        setDragging(null);
+        clearDrag();
         translateSnapshot.current.clear();
         translateExtras.current = null;
       }
@@ -251,11 +406,14 @@ export function FloorPlanCanvas() {
     setPendingLength,
     setSelection,
     setWallDraftStart,
+    clearDrag,
   ]);
 
   useEffect(() => {
     setRectDraftStart(null);
   }, [tool]);
+
+  useEffect(() => () => detachWindowDragListeners(), [detachWindowDragListeners]);
 
   const screenToWorld = useCallback(
     (screenX: number, screenY: number): Point => {
@@ -294,21 +452,176 @@ export function FloorPlanCanvas() {
   );
 
   const beginOpeningDrag = useCallback(
-    (openingId: string, world: Point) => {
+    (openingId: string, world: Point, pointerId?: number | null) => {
       const opening = openings.find((o) => o.id === openingId);
       const wall = opening ? walls.find((w) => w.id === opening.wallId) : undefined;
       if (!opening || !wall) return;
       const proj = projectPointOnSegment(world, wall.start, wall.end);
       const along = proj.t * wallLength(wall);
-      setSelection({ type: 'opening', id: openingId });
-      recordHistory();
-      setDragging({
-        kind: 'opening',
-        id: openingId,
-        grabAlongOffset: along - opening.offset,
-      });
+      setOpeningSelection([openingId]);
+      startDrag(
+        {
+          kind: 'opening',
+          id: openingId,
+          grabAlongOffset: along - opening.offset,
+        },
+        pointerId,
+      );
     },
-    [openings, walls, recordHistory, setSelection],
+    [openings, walls, setOpeningSelection, startDrag],
+  );
+
+  const beginPlaceableInteraction = useCallback(
+    (
+      placeableType: 'furniture' | 'landscape',
+      id: string,
+      shiftKeyDown: boolean,
+      displayPt: Point,
+      world: Point,
+      screenPt: Point,
+      konvaEvent?: Konva.KonvaEventObject<MouseEvent>,
+    ) => {
+      if (tool !== 'select') {
+        return;
+      }
+      if (konvaEvent) {
+        konvaEvent.cancelBubble = true;
+        konvaEvent.evt.preventDefault();
+      }
+
+      const item =
+        placeableType === 'furniture'
+          ? furniture.find((f) => f.id === id)
+          : landscape.find((l) => l.id === id);
+      if (!item) return;
+
+      const handleHitRadius = 10 / stageScale;
+      const canResize =
+        placeableType === 'furniture' || isRectPlaceable('landscape', item);
+      const selectedFurnitureIds = getSelectedFurnitureIds(selection);
+      const selectedLandscapeIds =
+        selection?.type === 'landscape'
+          ? selection.ids
+          : selection?.type === 'mixed'
+            ? selection.landscapeIds
+            : [];
+      const alreadySingleSelected =
+        placeableType === 'furniture'
+          ? selectedFurnitureIds.length === 1 && selectedFurnitureIds[0] === id
+          : selectedLandscapeIds.length === 1 && selectedLandscapeIds[0] === id;
+      const handle =
+        alreadySingleSelected &&
+        canResize &&
+        hitPlaceableResizeHandle(displayPt, item, (p) => toDisplay(p, ppu), handleHitRadius);
+
+      if (shiftKeyDown) {
+        if (placeableType === 'furniture') {
+          toggleFurnitureSelection(id, true);
+        } else {
+          toggleLandscapeSelection(id, true);
+        }
+        return;
+      }
+
+      const nextFurnitureIds =
+        placeableType === 'furniture'
+          ? selectedFurnitureIds.includes(id) && selectedFurnitureIds.length > 1
+            ? selectedFurnitureIds
+            : [id]
+          : [];
+      const nextLandscapeIds =
+        placeableType === 'landscape'
+          ? selectedLandscapeIds.includes(id) && selectedLandscapeIds.length > 1
+            ? selectedLandscapeIds
+            : [id]
+          : [];
+
+      pendingPlaceableSelectionRef.current = () => {
+        if (placeableType === 'furniture') {
+          setFurnitureSelection(nextFurnitureIds);
+        } else {
+          setLandscapeSelection(nextLandscapeIds);
+        }
+      };
+
+      const pointerId = konvaPointerId(konvaEvent);
+
+      if (handle) {
+        startDrag(
+          {
+            kind: 'placeable-resize',
+            type: placeableType,
+            id,
+            handle,
+          },
+          pointerId,
+        );
+        return;
+      }
+
+      const moveFurnitureIds = nextFurnitureIds;
+      if (placeableType === 'furniture' && moveFurnitureIds.length > 1) {
+        furnitureTranslateSnapshot.current = new Map(
+          furniture
+            .filter((f) => moveFurnitureIds.includes(f.id))
+            .map((f) => [f.id, { ...f.position }]),
+        );
+      } else {
+        furnitureTranslateSnapshot.current.clear();
+      }
+      startDrag(
+        {
+          kind: 'placeable',
+          type: placeableType,
+          id,
+          grabOffset: subtract(world, item.position),
+          startScreen: screenPt,
+          activated: false,
+        },
+        pointerId,
+      );
+    },
+    [
+      tool,
+      furniture,
+      landscape,
+      selection,
+      stageScale,
+      ppu,
+      setFurnitureSelection,
+      setLandscapeSelection,
+      toggleFurnitureSelection,
+      toggleLandscapeSelection,
+      startDrag,
+    ],
+  );
+
+  const handlePlaceablePointerDown = useCallback(
+    (
+      placeableType: 'furniture' | 'landscape',
+      id: string,
+      e: Konva.KonvaEventObject<MouseEvent>,
+    ) => {
+      const stage = stageRef.current;
+      if (!stage) return;
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+      const displayPt = {
+        x: (pos.x - stagePos.x) / stageScale,
+        y: (pos.y - stagePos.y) / stageScale,
+      };
+      const world = screenToWorld(pos.x, pos.y);
+      beginPlaceableInteraction(
+        placeableType,
+        id,
+        e.evt.shiftKey,
+        displayPt,
+        world,
+        pos,
+        e,
+      );
+    },
+    [beginPlaceableInteraction, screenToWorld, stagePos.x, stagePos.y, stageScale],
   );
 
   const getRectCorner = useCallback(
@@ -351,9 +664,11 @@ export function FloorPlanCanvas() {
     const pos = stage.getPointerPosition();
     if (!pos) return;
 
+    const pointerId = konvaPointerId(e);
+
     const isPan = tool === 'pan' || spaceDown || e.evt.button === 1;
     if (isPan) {
-      setDragging({ kind: 'pan', last: { x: pos.x, y: pos.y } });
+      startDrag({ kind: 'pan', last: { x: pos.x, y: pos.y } }, pointerId);
       return;
     }
 
@@ -427,8 +742,10 @@ export function FloorPlanCanvas() {
       };
       const handleHitRadius = 10 / stageScale;
 
-      if (selection?.type === 'furniture') {
-        const selected = furniture.find((f) => f.id === selection.id);
+      if (getSelectedFurnitureIds(selection).length === 1) {
+        const selected = furniture.find(
+          (f) => f.id === getSelectedFurnitureIds(selection)[0],
+        );
         if (selected) {
           const handle = hitPlaceableResizeHandle(
             displayPt,
@@ -437,20 +754,24 @@ export function FloorPlanCanvas() {
             handleHitRadius,
           );
           if (handle) {
-            recordHistory();
-            setDragging({
-              kind: 'placeable-resize',
-              type: 'furniture',
-              id: selected.id,
-              handle,
-            });
+            startDrag(
+              {
+                kind: 'placeable-resize',
+                type: 'furniture',
+                id: selected.id,
+                handle,
+              },
+              pointerId,
+            );
             return;
           }
         }
       }
 
-      if (selection?.type === 'landscape') {
-        const selected = landscape.find((l) => l.id === selection.id);
+      if (getSelectedLandscapeIds(selection).length === 1) {
+        const selected = landscape.find(
+          (l) => l.id === getSelectedLandscapeIds(selection)[0],
+        );
         if (selected && isRectPlaceable('landscape', selected)) {
           const handle = hitPlaceableResizeHandle(
             displayPt,
@@ -459,13 +780,15 @@ export function FloorPlanCanvas() {
             handleHitRadius,
           );
           if (handle) {
-            recordHistory();
-            setDragging({
-              kind: 'placeable-resize',
-              type: 'landscape',
-              id: selected.id,
-              handle,
-            });
+            startDrag(
+              {
+                kind: 'placeable-resize',
+                type: 'landscape',
+                id: selected.id,
+                handle,
+              },
+              pointerId,
+            );
             return;
           }
         }
@@ -475,47 +798,29 @@ export function FloorPlanCanvas() {
       const lightHit = getLightAtPoint(world, lights, lightRadius);
       if (lightHit) {
         setSelection({ type: 'light', id: lightHit.id });
-        recordHistory();
-        setDragging({
-          kind: 'light',
-          id: lightHit.id,
-          grabOffset: subtract(world, lightHit.position),
-        });
+        startDrag(
+          {
+            kind: 'light',
+            id: lightHit.id,
+            grabOffset: subtract(world, lightHit.position),
+          },
+          pointerId,
+        );
         return;
       }
 
       const placeableHit =
         isGroundFloor ? getPlaceableAtPoint(world, furniture, landscape) : null;
       if (placeableHit) {
-        const item =
-          placeableHit.type === 'furniture'
-            ? furniture.find((f) => f.id === placeableHit.id)
-            : landscape.find((l) => l.id === placeableHit.id);
-        if (item) {
-          const canResize =
-            placeableHit.type === 'furniture' ||
-            isRectPlaceable('landscape', item);
-          const handle =
-            canResize &&
-            hitPlaceableResizeHandle(displayPt, item, (p) => toDisplay(p, ppu), handleHitRadius);
-          setSelection({ type: placeableHit.type, id: placeableHit.id });
-          recordHistory();
-          if (handle) {
-            setDragging({
-              kind: 'placeable-resize',
-              type: placeableHit.type,
-              id: placeableHit.id,
-              handle,
-            });
-          } else {
-            setDragging({
-              kind: 'placeable',
-              type: placeableHit.type,
-              id: placeableHit.id,
-              grabOffset: subtract(world, item.position),
-            });
-          }
-        }
+        beginPlaceableInteraction(
+          placeableHit.type,
+          placeableHit.id,
+          e.evt.shiftKey,
+          displayPt,
+          world,
+          pos,
+          e,
+        );
         return;
       }
 
@@ -526,7 +831,15 @@ export function FloorPlanCanvas() {
         12 / stageScale / (ppu ?? 1),
       );
       if (openingHit) {
-        beginOpeningDrag(openingHit.id, world);
+        if (e.evt.shiftKey) {
+          toggleOpeningSelection(openingHit.id, true);
+          return;
+        }
+        const selectedOpeningIds = getSelectedOpeningIds(selection);
+        if (!selectedOpeningIds.includes(openingHit.id)) {
+          setOpeningSelection([openingHit.id]);
+        }
+        beginOpeningDrag(openingHit.id, world, pointerId);
         return;
       }
 
@@ -542,11 +855,14 @@ export function FloorPlanCanvas() {
           });
         }
         recordHistory();
-        setDragging({
-          kind: 'endpoint',
-          wallId: endpointHit.wallId,
-          end: endpointHit.end,
-        });
+        startDrag(
+          {
+            kind: 'endpoint',
+            wallId: endpointHit.wallId,
+            end: endpointHit.end,
+          },
+          pointerId,
+        );
         return;
       }
 
@@ -603,20 +919,315 @@ export function FloorPlanCanvas() {
             }
           : null;
         recordHistory();
-        setDragging({ kind: 'translate', wallIds: moveIds, startWorld: snap });
+        startDrag({ kind: 'translate', wallIds: moveIds, startWorld: snap }, pointerId);
         return;
       }
 
       if (e.evt.button === 0) {
         if (!e.evt.shiftKey) setSelection(null);
-        setDragging({
-          kind: 'marquee',
-          startDisplay: displayPt,
-          currentDisplay: displayPt,
-        });
+        startDrag(
+          {
+            kind: 'marquee',
+            startDisplay: displayPt,
+            currentDisplay: displayPt,
+          },
+          pointerId,
+        );
       }
     }
   };
+
+  const processDragMove = useCallback(
+    (pos: Point) => {
+      const drag = draggingRef.current;
+      if (!drag) return;
+
+      if (drag.kind === 'pan') {
+        const dx = pos.x - drag.last.x;
+        const dy = pos.y - drag.last.y;
+        setStagePos((p) => ({ x: p.x + dx, y: p.y + dy }));
+        const next = { kind: 'pan' as const, last: { x: pos.x, y: pos.y } };
+        draggingRef.current = next;
+        setDragging(next);
+        return;
+      }
+
+      const fromPoint =
+        drag.kind === 'endpoint'
+          ? undefined
+          : tool === 'wall' || tool === 'rect'
+            ? wallDraftStart ?? undefined
+            : undefined;
+      const { point: world } = resolveSnap(screenToWorld(pos.x, pos.y), fromPoint);
+
+      if (drag.kind === 'endpoint') {
+        const wall = walls.find((w) => w.id === drag.wallId);
+        if (wall) {
+          if (drag.end === 'start') {
+            updateWall(wall.id, { start: world }, { recordHistory: false });
+          } else {
+            updateWall(wall.id, { end: world }, { recordHistory: false });
+          }
+        }
+        dragMovedRef.current = true;
+        return;
+      }
+
+      if (drag.kind === 'translate') {
+        const snapWorld =
+          gridEnabled && (tool === 'select' || tool === 'wall')
+            ? resolveSnap(world).point
+            : world;
+        const delta = subtract(snapWorld, drag.startWorld);
+        const moved = applyDeltaToWalls(
+          walls,
+          drag.wallIds,
+          delta,
+          translateSnapshot.current,
+        );
+        setWallsSilent(moved);
+        if (translateExtras.current) {
+          const extras = translateExtras.current;
+          useFloorPlanStore.setState({
+            backgroundOffset: add(extras.backgroundOffset, delta),
+            suggestions: extras.suggestions.map((s) => ({
+              ...s,
+              start: add(s.start, delta),
+              end: add(s.end, delta),
+            })),
+            furniture: extras.furniture.map((f) => ({
+              ...f,
+              position: add(f.position, delta),
+            })),
+            landscape: extras.landscape.map((l) => ({
+              ...l,
+              position: add(l.position, delta),
+            })),
+          });
+        }
+        dragMovedRef.current = true;
+        return;
+      }
+
+      if (drag.kind === 'opening') {
+        const opening = openings.find((o) => o.id === drag.id);
+        const wall = opening ? walls.find((w) => w.id === opening.wallId) : undefined;
+        if (opening && wall) {
+          const proj = projectPointOnSegment(world, wall.start, wall.end);
+          const along = proj.t * wallLength(wall);
+          const rawOffset = along - drag.grabAlongOffset;
+          updateOpening(opening.id, { offset: rawOffset }, { recordHistory: false });
+        }
+        dragMovedRef.current = true;
+        return;
+      }
+
+      if (drag.kind === 'placeable-resize') {
+        const item =
+          drag.type === 'furniture'
+            ? furniture.find((f) => f.id === drag.id)
+            : landscape.find((l) => l.id === drag.id);
+        if (item) {
+          const next = resizePlacedFromHandle(item, drag.handle, world);
+          if (drag.type === 'furniture') {
+            updateFurniture(drag.id, next, { recordHistory: false });
+          } else {
+            updateLandscape(drag.id, next, { recordHistory: false });
+          }
+        }
+        dragMovedRef.current = true;
+        return;
+      }
+
+      if (drag.kind === 'light') {
+        const nextPosition = subtract(world, drag.grabOffset);
+        updateLight(drag.id, { position: nextPosition }, { recordHistory: false });
+        dragMovedRef.current = true;
+        return;
+      }
+
+      if (drag.kind === 'placeable') {
+        if (!drag.activated) {
+          const dist = Math.hypot(
+            pos.x - drag.startScreen.x,
+            pos.y - drag.startScreen.y,
+          );
+          if (dist < PLACEABLE_DRAG_THRESHOLD_PX) return;
+          draggingRef.current = { ...drag, activated: true };
+          document.body.style.cursor = 'move';
+        }
+
+        const activeDrag = draggingRef.current as Extract<
+          DragState,
+          { kind: 'placeable' }
+        >;
+        const rawCenter = subtract(world, activeDrag.grabOffset);
+        const item =
+          activeDrag.type === 'furniture'
+            ? furniture.find((f) => f.id === activeDrag.id)
+            : landscape.find((l) => l.id === activeDrag.id);
+        // Snap only on release — wall snap is O(walls × corners) and can block the drag loop.
+        const nextPosition = rawCenter;
+
+        if (activeDrag.type === 'furniture' && furnitureTranslateSnapshot.current.size > 1) {
+          const anchor = furnitureTranslateSnapshot.current.get(activeDrag.id);
+          if (anchor) {
+            const delta = subtract(nextPosition, anchor);
+            const moveIds = [...furnitureTranslateSnapshot.current.keys()];
+            const moved = applyDeltaToFurniture(
+              furniture,
+              moveIds,
+              delta,
+              furnitureTranslateSnapshot.current,
+            );
+            useFloorPlanStore.setState({ furniture: moved });
+          }
+        } else if (activeDrag.type === 'furniture') {
+          updateFurniture(activeDrag.id, { position: nextPosition }, { recordHistory: false });
+        } else {
+          updateLandscape(activeDrag.id, { position: nextPosition }, { recordHistory: false });
+        }
+        dragMovedRef.current = true;
+        return;
+      }
+
+      if (drag.kind === 'marquee') {
+        const next = {
+          ...drag,
+          currentDisplay: {
+            x: (pos.x - stagePos.x) / stageScale,
+            y: (pos.y - stagePos.y) / stageScale,
+          },
+        };
+        draggingRef.current = next;
+        setDragging(next);
+      }
+    },
+    [
+      tool,
+      wallDraftStart,
+      walls,
+      openings,
+      furniture,
+      landscape,
+      gridEnabled,
+      stageScale,
+      stagePos.x,
+      stagePos.y,
+      ppu,
+      resolveSnap,
+      screenToWorld,
+      updateWall,
+      setWallsSilent,
+      updateOpening,
+      updateFurniture,
+      updateLandscape,
+      updateLight,
+    ],
+  );
+
+  const finishDrag = useCallback(() => {
+    const drag = draggingRef.current;
+    if (!drag) return;
+
+    if (tool === 'rect' && rectDraftStart && cursorWorld) {
+      const end = getRectCorner(rectDraftStart, cursorWorld);
+      addRectangleWalls(rectDraftStart, end);
+      setRectDraftStart(null);
+    }
+
+    if (drag.kind === 'marquee') {
+      const rect = normalizeDisplayRect(drag.startDisplay, drag.currentDisplay);
+      const minSize = 4 / stageScale;
+      if (rect.maxX - rect.minX > minSize || rect.maxY - rect.minY > minSize) {
+        const worldRect = displayRectToWorldRect(rect, (p) => fromDisplay(p, ppu));
+        const wallIds = wallsInWorldRect(walls, worldRect);
+        const openingIds = openingsInWorldRect(walls, openings, worldRect);
+        const furnitureIds = isGroundFloor
+          ? furnitureInWorldRect(furniture, worldRect)
+          : [];
+        const landscapeIds = isGroundFloor
+          ? landscapeInWorldRect(landscape, worldRect)
+          : [];
+        const nextSelection = selectionFromMarquee(
+          wallIds,
+          openingIds,
+          furnitureIds,
+          landscapeIds,
+        );
+        if (nextSelection) setSelection(nextSelection);
+      }
+    }
+
+    if (drag.kind === 'translate') {
+      translateSnapshot.current.clear();
+      translateExtras.current = null;
+    }
+
+    if (drag.kind === 'placeable' || drag.kind === 'placeable-resize') {
+      pendingPlaceableSelectionRef.current?.();
+      pendingPlaceableSelectionRef.current = null;
+      furnitureTranslateSnapshot.current.clear();
+    }
+
+    if (drag.kind === 'placeable' && dragMovedRef.current) {
+      const item =
+        drag.type === 'furniture'
+          ? furniture.find((f) => f.id === drag.id)
+          : landscape.find((l) => l.id === drag.id);
+      if (item && walls.length > 0) {
+        const placeableSnapRadius = (SNAP_RADIUS / stageScale) / (ppu ?? 1);
+        try {
+          const snapped = snapPlaceablePosition(
+            walls,
+            item,
+            item.position,
+            placeableSnapRadius,
+          );
+          if (drag.type === 'furniture') {
+            updateFurniture(drag.id, { position: snapped }, { recordHistory: false });
+          } else {
+            updateLandscape(drag.id, { position: snapped }, { recordHistory: false });
+          }
+        } catch {
+          /* keep unsnapped position from drag */
+        }
+      }
+    }
+
+    if (
+      dragMovedRef.current &&
+      (drag.kind === 'opening' ||
+        drag.kind === 'light' ||
+        drag.kind === 'placeable' ||
+        drag.kind === 'placeable-resize')
+    ) {
+      recordHistory();
+    }
+
+    clearDrag();
+  }, [
+    tool,
+    rectDraftStart,
+    cursorWorld,
+    getRectCorner,
+    addRectangleWalls,
+    stageScale,
+    ppu,
+    walls,
+    openings,
+    furniture,
+    landscape,
+    isGroundFloor,
+    setSelection,
+    recordHistory,
+    clearDrag,
+    updateFurniture,
+    updateLandscape,
+  ]);
+
+  processDragMoveRef.current = processDragMove;
+  finishDragRef.current = finishDrag;
 
   const handleMouseMove = () => {
     const stage = stageRef.current;
@@ -624,163 +1235,30 @@ export function FloorPlanCanvas() {
     const pos = stage.getPointerPosition();
     if (!pos) return;
 
-    if (dragging?.kind === 'pan') {
-      const dx = pos.x - dragging.last.x;
-      const dy = pos.y - dragging.last.y;
-      setStagePos((p) => ({ x: p.x + dx, y: p.y + dy }));
-      setDragging({ kind: 'pan', last: { x: pos.x, y: pos.y } });
+    if (draggingRef.current) {
+      processDragMove(pos);
       return;
     }
 
     const fromPoint =
-      dragging?.kind === 'endpoint'
-        ? undefined
-        : tool === 'wall' || tool === 'rect'
-          ? wallDraftStart ?? undefined
-          : undefined;
+      tool === 'wall' || tool === 'rect' ? wallDraftStart ?? undefined : undefined;
     const { point: world, snap } = resolveSnap(screenToWorld(pos.x, pos.y), fromPoint);
     setCursorWorld(world);
-    const showSnap =
-      tool === 'wall' || tool === 'rect' || tool === 'select';
+    const showSnap = tool === 'wall' || tool === 'rect' || tool === 'select';
     setActiveSnap(showSnap && snap.kind !== 'none' ? snap : null);
-
-    if (dragging?.kind === 'endpoint') {
-      const wall = walls.find((w) => w.id === dragging.wallId);
-      if (wall) {
-        if (dragging.end === 'start') {
-          updateWall(wall.id, { start: world }, { recordHistory: false });
-        } else {
-          updateWall(wall.id, { end: world }, { recordHistory: false });
-        }
-      }
-      return;
-    }
-
-    if (dragging?.kind === 'translate') {
-      const snapWorld =
-        gridEnabled && (tool === 'select' || tool === 'wall')
-          ? resolveSnap(world).point
-          : world;
-      const delta = subtract(snapWorld, dragging.startWorld);
-      const moved = applyDeltaToWalls(
-        walls,
-        dragging.wallIds,
-        delta,
-        translateSnapshot.current,
-      );
-      setWallsSilent(moved);
-      if (translateExtras.current) {
-        const extras = translateExtras.current;
-        useFloorPlanStore.setState({
-          backgroundOffset: add(extras.backgroundOffset, delta),
-          suggestions: extras.suggestions.map((s) => ({
-            ...s,
-            start: add(s.start, delta),
-            end: add(s.end, delta),
-          })),
-          furniture: extras.furniture.map((f) => ({
-            ...f,
-            position: add(f.position, delta),
-          })),
-          landscape: extras.landscape.map((l) => ({
-            ...l,
-            position: add(l.position, delta),
-          })),
-        });
-      }
-      return;
-    }
-
-    if (dragging?.kind === 'opening') {
-      const opening = openings.find((o) => o.id === dragging.id);
-      const wall = opening ? walls.find((w) => w.id === opening.wallId) : undefined;
-      if (opening && wall) {
-        const proj = projectPointOnSegment(world, wall.start, wall.end);
-        const along = proj.t * wallLength(wall);
-        const rawOffset = along - dragging.grabAlongOffset;
-        updateOpening(opening.id, { offset: rawOffset }, { recordHistory: false });
-      }
-      return;
-    }
-
-    if (dragging?.kind === 'placeable-resize') {
-      const item =
-        dragging.type === 'furniture'
-          ? furniture.find((f) => f.id === dragging.id)
-          : landscape.find((l) => l.id === dragging.id);
-      if (item) {
-        const next = resizePlacedFromHandle(item, dragging.handle, world);
-        if (dragging.type === 'furniture') {
-          updateFurniture(dragging.id, next, { recordHistory: false });
-        } else {
-          updateLandscape(dragging.id, next, { recordHistory: false });
-        }
-      }
-      return;
-    }
-
-    if (dragging?.kind === 'light') {
-      const nextPosition = subtract(world, dragging.grabOffset);
-      updateLight(dragging.id, { position: nextPosition }, { recordHistory: false });
-      return;
-    }
-
-    if (dragging?.kind === 'placeable') {
-      const rawCenter = subtract(world, dragging.grabOffset);
-      const item =
-        dragging.type === 'furniture'
-          ? furniture.find((f) => f.id === dragging.id)
-          : landscape.find((l) => l.id === dragging.id);
-      const placeableSnapRadius = (SNAP_RADIUS / stageScale) / (ppu ?? 1);
-      const nextPosition =
-        item && walls.length > 0
-          ? snapPlaceablePosition(walls, item, rawCenter, placeableSnapRadius)
-          : rawCenter;
-      if (dragging.type === 'furniture') {
-        updateFurniture(dragging.id, { position: nextPosition }, { recordHistory: false });
-      } else {
-        updateLandscape(dragging.id, { position: nextPosition }, { recordHistory: false });
-      }
-      return;
-    }
-
-    if (dragging?.kind === 'marquee') {
-      setDragging({
-        ...dragging,
-        currentDisplay: {
-          x: (pos.x - stagePos.x) / stageScale,
-          y: (pos.y - stagePos.y) / stageScale,
-        },
-      });
-    }
   };
 
   const handleMouseUp = () => {
-    if (tool === 'rect' && rectDraftStart && cursorWorld) {
-      const end = getRectCorner(rectDraftStart, cursorWorld);
-      addRectangleWalls(rectDraftStart, end);
-      setRectDraftStart(null);
+    const drag = draggingRef.current;
+    if (
+      drag?.kind === 'placeable' ||
+      drag?.kind === 'placeable-resize' ||
+      drag?.kind === 'opening' ||
+      drag?.kind === 'light'
+    ) {
+      return;
     }
-
-    if (dragging?.kind === 'marquee') {
-      const rect = normalizeDisplayRect(
-        dragging.startDisplay,
-        dragging.currentDisplay,
-      );
-      const minSize = 4 / stageScale;
-      if (rect.maxX - rect.minX > minSize || rect.maxY - rect.minY > minSize) {
-        const worldRect = displayRectToWorldRect(rect, (p) => fromDisplay(p, ppu));
-        const ids = wallsInWorldRect(walls, worldRect);
-        if (ids.length > 0) setWallSelection(ids);
-      }
-    }
-
-    if (dragging?.kind === 'translate') {
-      translateSnapshot.current.clear();
-      translateExtras.current = null;
-    }
-
-    setDragging(null);
+    finishDrag();
   };
 
   const draftEnd =
@@ -831,7 +1309,6 @@ export function FloorPlanCanvas() {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
         style={{
           cursor:
             tool === 'pan' || spaceDown
@@ -1039,21 +1516,6 @@ export function FloorPlanCanvas() {
             />
           )}
 
-          {isGroundFloor && (
-            <PlaceableShapes
-              furniture={furniture}
-              landscape={landscape}
-              selection={
-                selection?.type === 'furniture' || selection?.type === 'landscape'
-                  ? selection
-                  : null
-              }
-              toDisplay={(p) => toDisplay(p, ppu)}
-              stageScale={stageScale}
-              onSelectFurniture={(id) => setSelection({ type: 'furniture', id })}
-              onSelectLandscape={(id) => setSelection({ type: 'landscape', id })}
-            />
-          )}
 
           <LightShapes
             lights={lights}
@@ -1070,8 +1532,7 @@ export function FloorPlanCanvas() {
             const end = pointOnWall(wall, opening.offset + opening.width);
             const ds = toDisplay(start, ppu);
             const de = toDisplay(end, ppu);
-            const selected =
-              selection?.type === 'opening' && selection.id === opening.id;
+            const selected = isOpeningSelected(selection, opening.id);
             const dir = wallDirection(wall);
             const angle = Math.atan2(dir.y, dir.x);
             const doorSymbol =
@@ -1082,7 +1543,7 @@ export function FloorPlanCanvas() {
             return (
               <Group
                 key={opening.id}
-                onClick={() => setSelection({ type: 'opening', id: opening.id })}
+                onClick={() => setOpeningSelection([opening.id])}
                 onMouseDown={(e) => {
                   if (tool !== 'select') return;
                   e.cancelBubble = true;
@@ -1166,6 +1627,24 @@ export function FloorPlanCanvas() {
               </Group>
             );
           })}
+
+          {isGroundFloor && (
+            <PlaceableShapes
+              furniture={furniture}
+              landscape={landscape}
+              selection={selection}
+              activeDragId={
+                dragging?.kind === 'placeable' || dragging?.kind === 'placeable-resize'
+                  ? { type: dragging.type, id: dragging.id }
+                  : null
+              }
+              toDisplay={(p) => toDisplay(p, ppu)}
+              stageScale={stageScale}
+              onSelectFurniture={(id) => setFurnitureSelection([id])}
+              onSelectLandscape={(id) => setLandscapeSelection([id])}
+              onPointerDown={handlePlaceablePointerDown}
+            />
+          )}
 
           {wallDraftStart && draftEnd && (
             <>

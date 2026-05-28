@@ -6,12 +6,25 @@ import type {
   Selection,
   Wall,
 } from '../../types/floorPlan';
+import {
+  getSelectedFurnitureIds,
+  getSelectedLandscapeIds,
+  getSelectedOpeningIds,
+  getSelectedWallIds,
+} from '../geometry/selection';
 
 export type PlanClipboard =
   | { type: 'walls'; walls: Wall[]; openings: Opening[] }
-  | { type: 'opening'; opening: Opening }
-  | { type: 'furniture'; item: Furniture }
-  | { type: 'landscape'; item: LandscapeElement };
+  | { type: 'openings'; openings: Opening[] }
+  | { type: 'furniture'; items: Furniture[] }
+  | { type: 'landscape'; items: LandscapeElement[] }
+  | {
+      type: 'mixed';
+      walls: Wall[];
+      openings: Opening[];
+      furniture: Furniture[];
+      landscape: LandscapeElement[];
+    };
 
 let sessionClipboard: PlanClipboard | null = null;
 
@@ -36,35 +49,74 @@ export function buildClipboardFromSelection(state: {
   const { selection } = state;
   if (!selection) return null;
 
-  switch (selection.type) {
-    case 'walls': {
-      if (selection.ids.length === 0) return null;
-      const idSet = new Set(selection.ids);
-      const walls = state.walls
-        .filter((w) => idSet.has(w.id))
-        .map((w) => structuredClone(w));
-      if (walls.length === 0) return null;
-      const openings = state.openings
-        .filter((o) => idSet.has(o.wallId))
-        .map((o) => structuredClone(o));
-      return { type: 'walls', walls, openings };
-    }
-    case 'opening': {
-      const opening = state.openings.find((o) => o.id === selection.id);
-      if (!opening) return null;
-      return { type: 'opening', opening: structuredClone(opening) };
-    }
-    case 'furniture': {
-      const item = state.furniture.find((f) => f.id === selection.id);
-      if (!item) return null;
-      return { type: 'furniture', item: structuredClone(item) };
-    }
-    case 'landscape': {
-      const item = state.landscape.find((l) => l.id === selection.id);
-      if (!item) return null;
-      return { type: 'landscape', item: structuredClone(item) };
-    }
-    default:
+  if (selection.type === 'mixed') {
+    const wallIdSet = new Set(selection.wallIds);
+    const openingIdSet = new Set(selection.openingIds);
+    const furnitureIdSet = new Set(selection.furnitureIds);
+    const landscapeIdSet = new Set(selection.landscapeIds);
+    const walls = state.walls
+      .filter((w) => wallIdSet.has(w.id))
+      .map((w) => structuredClone(w));
+    const openings = state.openings
+      .filter((o) => openingIdSet.has(o.id))
+      .map((o) => structuredClone(o));
+    const furniture = state.furniture
+      .filter((f) => furnitureIdSet.has(f.id))
+      .map((f) => structuredClone(f));
+    const landscape = state.landscape
+      .filter((l) => landscapeIdSet.has(l.id))
+      .map((l) => structuredClone(l));
+    if (
+      walls.length + openings.length + furniture.length + landscape.length ===
+      0
+    ) {
       return null;
+    }
+    return { type: 'mixed', walls, openings, furniture, landscape };
   }
+
+  const wallIds = getSelectedWallIds(selection);
+  if (wallIds.length > 0 && selection.type === 'walls') {
+    const idSet = new Set(wallIds);
+    const walls = state.walls
+      .filter((w) => idSet.has(w.id))
+      .map((w) => structuredClone(w));
+    if (walls.length === 0) return null;
+    const openings = state.openings
+      .filter((o) => idSet.has(o.wallId))
+      .map((o) => structuredClone(o));
+    return { type: 'walls', walls, openings };
+  }
+
+  const openingIds = getSelectedOpeningIds(selection);
+  if (openingIds.length > 0) {
+    const idSet = new Set(openingIds);
+    const openings = state.openings
+      .filter((o) => idSet.has(o.id))
+      .map((o) => structuredClone(o));
+    if (openings.length === 0) return null;
+    return { type: 'openings', openings };
+  }
+
+  const furnitureIds = getSelectedFurnitureIds(selection);
+  if (furnitureIds.length > 0) {
+    const idSet = new Set(furnitureIds);
+    const items = state.furniture
+      .filter((f) => idSet.has(f.id))
+      .map((f) => structuredClone(f));
+    if (items.length === 0) return null;
+    return { type: 'furniture', items };
+  }
+
+  const landscapeIds = getSelectedLandscapeIds(selection);
+  if (landscapeIds.length > 0) {
+    const idSet = new Set(landscapeIds);
+    const items = state.landscape
+      .filter((l) => idSet.has(l.id))
+      .map((l) => structuredClone(l));
+    if (items.length === 0) return null;
+    return { type: 'landscape', items };
+  }
+
+  return null;
 }

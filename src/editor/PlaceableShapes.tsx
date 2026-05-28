@@ -1,5 +1,12 @@
 import { Ellipse, Group, Line, Text } from 'react-konva';
-import type { Furniture, LandscapeElement } from '../types/floorPlan';
+import type Konva from 'konva';
+import type { Furniture, LandscapeElement, Selection } from '../types/floorPlan';
+import {
+  getSelectedFurnitureIds,
+  getSelectedLandscapeIds,
+  isFurnitureSelected,
+  isLandscapeSelected,
+} from '../lib/geometry/selection';
 import {
   pointInEllipse,
   pointInRect,
@@ -50,6 +57,7 @@ type RectShapeProps = {
   selected: boolean;
   stageScale: number;
   onSelect: () => void;
+  onPointerDown?: (e: Konva.KonvaEventObject<MouseEvent>) => void;
 };
 
 function RectPlaceableShape({
@@ -58,6 +66,7 @@ function RectPlaceableShape({
   selected,
   stageScale,
   onSelect,
+  onPointerDown,
 }: RectShapeProps) {
   const fill =
     item.category === 'furniture'
@@ -75,7 +84,7 @@ function RectPlaceableShape({
     displayCorners.reduce((s, p) => s + p.y, 0) / displayCorners.length;
 
   return (
-    <Group onClick={onSelect}>
+    <Group onClick={onSelect} onMouseDown={onPointerDown}>
       <Line
         points={toFlatPoints(displayCorners)}
         closed
@@ -107,6 +116,7 @@ type OvalShapeProps = {
   selected: boolean;
   stageScale: number;
   onSelect: () => void;
+  onPointerDown?: (e: Konva.KonvaEventObject<MouseEvent>) => void;
 };
 
 function OvalLandscapeShape({
@@ -115,6 +125,7 @@ function OvalLandscapeShape({
   selected,
   stageScale,
   onSelect,
+  onPointerDown,
 }: OvalShapeProps) {
   const fill = LANDSCAPE_COLORS[item.kind];
   const label = LANDSCAPE_LABELS[item.kind];
@@ -123,6 +134,7 @@ function OvalLandscapeShape({
   return (
     <Group
       onClick={onSelect}
+      onMouseDown={onPointerDown}
       x={center.x}
       y={center.y}
       rotation={rotationDeg}
@@ -154,22 +166,36 @@ function OvalLandscapeShape({
 type Props = {
   furniture: Furniture[];
   landscape: LandscapeElement[];
-  selection: { type: string; id: string } | null;
+  selection: Selection;
+  activeDragId?: { type: 'furniture' | 'landscape'; id: string } | null;
   toDisplay: (p: Point) => Point;
   stageScale: number;
   onSelectFurniture: (id: string) => void;
   onSelectLandscape: (id: string) => void;
+  onPointerDown?: (
+    type: 'furniture' | 'landscape',
+    id: string,
+    e: Konva.KonvaEventObject<MouseEvent>,
+  ) => void;
 };
 
 export function PlaceableShapes({
   furniture,
   landscape,
   selection,
+  activeDragId = null,
   toDisplay,
   stageScale,
   onSelectFurniture,
   onSelectLandscape,
+  onPointerDown,
 }: Props) {
+  const isFurnitureActive = (id: string) =>
+    isFurnitureSelected(selection, id) ||
+    (activeDragId?.type === 'furniture' && activeDragId.id === id);
+  const isLandscapeActive = (id: string) =>
+    isLandscapeSelected(selection, id) ||
+    (activeDragId?.type === 'landscape' && activeDragId.id === id);
   return (
     <>
       {furniture.map((item) => (
@@ -177,9 +203,14 @@ export function PlaceableShapes({
           key={item.id}
           item={item}
           displayCorners={rectCorners(item).map((c) => toDisplay(c))}
-          selected={selection?.type === 'furniture' && selection.id === item.id}
+          selected={isFurnitureActive(item.id)}
           stageScale={stageScale}
           onSelect={() => onSelectFurniture(item.id)}
+          onPointerDown={
+            onPointerDown
+              ? (e) => onPointerDown('furniture', item.id, e)
+              : undefined
+          }
         />
       ))}
       {landscape.map((item) =>
@@ -188,49 +219,67 @@ export function PlaceableShapes({
             key={item.id}
             item={item}
             toDisplay={toDisplay}
-            selected={selection?.type === 'landscape' && selection.id === item.id}
+            selected={isLandscapeActive(item.id)}
             stageScale={stageScale}
             onSelect={() => onSelectLandscape(item.id)}
+            onPointerDown={
+              onPointerDown
+                ? (e) => onPointerDown('landscape', item.id, e)
+                : undefined
+            }
           />
         ) : (
           <RectPlaceableShape
             key={item.id}
             item={item}
             displayCorners={rectCorners(item).map((c) => toDisplay(c))}
-            selected={selection?.type === 'landscape' && selection.id === item.id}
+            selected={isLandscapeActive(item.id)}
             stageScale={stageScale}
             onSelect={() => onSelectLandscape(item.id)}
+            onPointerDown={
+              onPointerDown
+                ? (e) => onPointerDown('landscape', item.id, e)
+                : undefined
+            }
           />
         ),
       )}
 
-      {selection?.type === 'furniture' && (() => {
-        const item = furniture.find((f) => f.id === selection.id);
-        if (!item) return null;
-        return (
-          <PlaceableResizeHandles
-            key={`resize-f-${item.id}`}
-            item={item}
-            displayCorners={rectCorners(item).map((c) => toDisplay(c))}
-            stageScale={stageScale}
-            toDisplay={toDisplay}
-          />
-        );
-      })()}
+      {getSelectedFurnitureIds(selection).length === 1 &&
+        activeDragId?.type !== 'furniture' &&
+        (() => {
+          const item = furniture.find(
+            (f) => f.id === getSelectedFurnitureIds(selection)[0],
+          );
+          if (!item) return null;
+          return (
+            <PlaceableResizeHandles
+              key={`resize-f-${item.id}`}
+              item={item}
+              displayCorners={rectCorners(item).map((c) => toDisplay(c))}
+              stageScale={stageScale}
+              toDisplay={toDisplay}
+            />
+          );
+        })()}
 
-      {selection?.type === 'landscape' && (() => {
-        const item = landscape.find((l) => l.id === selection.id);
-        if (!item || !isRectPlaceable('landscape', item)) return null;
-        return (
-          <PlaceableResizeHandles
-            key={`resize-l-${item.id}`}
-            item={item}
-            displayCorners={rectCorners(item).map((c) => toDisplay(c))}
-            stageScale={stageScale}
-            toDisplay={toDisplay}
-          />
-        );
-      })()}
+      {getSelectedLandscapeIds(selection).length === 1 &&
+        activeDragId?.type !== 'landscape' &&
+        (() => {
+          const item = landscape.find(
+            (l) => l.id === getSelectedLandscapeIds(selection)[0],
+          );
+          if (!item || !isRectPlaceable('landscape', item)) return null;
+          return (
+            <PlaceableResizeHandles
+              key={`resize-l-${item.id}`}
+              item={item}
+              displayCorners={rectCorners(item).map((c) => toDisplay(c))}
+              stageScale={stageScale}
+              toDisplay={toDisplay}
+            />
+          );
+        })()}
     </>
   );
 }

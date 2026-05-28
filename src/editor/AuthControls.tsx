@@ -21,7 +21,6 @@ export function AuthControls() {
 
   return (
     <div className="auth-controls">
-      <span className="project-status muted">{user.email ?? 'Signed in'}</span>
       <button type="button" className="action-bar-btn" onClick={() => void signOut()}>
         Sign out
       </button>

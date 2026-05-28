@@ -22,6 +22,7 @@ import type {
   TraceParams,
   Wall,
 } from '../types/floorPlan';
+import { pruneSelection } from '../lib/geometry/selection';
 import { getLayoutGeometry, patchLayoutGeometry } from '../lib/plan/layout';
 import {
   canAddFloorLevel,
@@ -138,6 +139,12 @@ type FloorPlanState = FloorPlan & {
     focus?: { id: string; anchor: 'start' | 'end' },
   ) => void;
   toggleWallSelection: (id: string, additive: boolean) => void;
+  setOpeningSelection: (ids: string[]) => void;
+  toggleOpeningSelection: (id: string, additive: boolean) => void;
+  setFurnitureSelection: (ids: string[]) => void;
+  toggleFurnitureSelection: (id: string, additive: boolean) => void;
+  setLandscapeSelection: (ids: string[]) => void;
+  toggleLandscapeSelection: (id: string, additive: boolean) => void;
   selectAllWalls: () => void;
   deleteSelectedWalls: () => void;
   deleteSelection: () => void;
@@ -500,6 +507,60 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     set({ selection: { type: 'walls', ids: [id] } });
   },
 
+  setOpeningSelection: (ids) =>
+    set({ selection: ids.length > 0 ? { type: 'opening', ids } : null }),
+
+  toggleOpeningSelection: (id, additive) => {
+    const sel = get().selection;
+    if (!additive) {
+      set({ selection: { type: 'opening', ids: [id] } });
+      return;
+    }
+    if (sel?.type === 'opening') {
+      const has = sel.ids.includes(id);
+      const ids = has ? sel.ids.filter((x) => x !== id) : [...sel.ids, id];
+      set({ selection: ids.length > 0 ? { type: 'opening', ids } : null });
+      return;
+    }
+    set({ selection: { type: 'opening', ids: [id] } });
+  },
+
+  setFurnitureSelection: (ids) =>
+    set({ selection: ids.length > 0 ? { type: 'furniture', ids } : null }),
+
+  toggleFurnitureSelection: (id, additive) => {
+    const sel = get().selection;
+    if (!additive) {
+      set({ selection: { type: 'furniture', ids: [id] } });
+      return;
+    }
+    if (sel?.type === 'furniture') {
+      const has = sel.ids.includes(id);
+      const ids = has ? sel.ids.filter((x) => x !== id) : [...sel.ids, id];
+      set({ selection: ids.length > 0 ? { type: 'furniture', ids } : null });
+      return;
+    }
+    set({ selection: { type: 'furniture', ids: [id] } });
+  },
+
+  setLandscapeSelection: (ids) =>
+    set({ selection: ids.length > 0 ? { type: 'landscape', ids } : null }),
+
+  toggleLandscapeSelection: (id, additive) => {
+    const sel = get().selection;
+    if (!additive) {
+      set({ selection: { type: 'landscape', ids: [id] } });
+      return;
+    }
+    if (sel?.type === 'landscape') {
+      const has = sel.ids.includes(id);
+      const ids = has ? sel.ids.filter((x) => x !== id) : [...sel.ids, id];
+      set({ selection: ids.length > 0 ? { type: 'landscape', ids } : null });
+      return;
+    }
+    set({ selection: { type: 'landscape', ids: [id] } });
+  },
+
   selectAllWalls: () => {
     const geo = getLayoutGeometry(get(), get().activeLevelId);
     const ids = geo.walls.map((w) => w.id);
@@ -525,22 +586,64 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   deleteSelection: () => {
     const sel = get().selection;
     if (!sel) return;
-    switch (sel.type) {
-      case 'walls':
-        get().deleteSelectedWalls();
-        break;
-      case 'opening':
-        get().deleteOpening(sel.id);
-        break;
-      case 'furniture':
-        get().deleteFurniture(sel.id);
-        break;
-      case 'landscape':
-        get().deleteLandscape(sel.id);
-        break;
-      case 'light':
-        get().deleteLight(sel.id);
-        break;
+
+    if (sel.type === 'walls') {
+      get().deleteSelectedWalls();
+      return;
+    }
+    if (sel.type === 'light') {
+      get().deleteLight(sel.id);
+      return;
+    }
+
+    get().recordHistory();
+    const geo = getLayoutGeometry(get(), get().activeLevelId);
+
+    if (sel.type === 'opening') {
+      const idSet = new Set(sel.ids);
+      set({
+        ...patchActiveLevel(get(), {
+          openings: geo.openings.filter((o) => !idSet.has(o.id)),
+        }),
+        selection: null,
+      });
+      return;
+    }
+
+    if (sel.type === 'furniture') {
+      const idSet = new Set(sel.ids);
+      set({
+        furniture: get().furniture.filter((f) => !idSet.has(f.id)),
+        selection: null,
+      });
+      return;
+    }
+
+    if (sel.type === 'landscape') {
+      const idSet = new Set(sel.ids);
+      set({
+        landscape: get().landscape.filter((l) => !idSet.has(l.id)),
+        selection: null,
+      });
+      return;
+    }
+
+    if (sel.type === 'mixed') {
+      const wallIdSet = new Set(sel.wallIds);
+      const openingIdSet = new Set(sel.openingIds);
+      const furnitureIdSet = new Set(sel.furnitureIds);
+      const landscapeIdSet = new Set(sel.landscapeIds);
+      set({
+        ...patchActiveLevel(get(), {
+          walls: geo.walls.filter((w) => !wallIdSet.has(w.id)),
+          openings: geo.openings.filter(
+            (o) => !openingIdSet.has(o.id) && !wallIdSet.has(o.wallId),
+          ),
+        }),
+        furniture: get().furniture.filter((f) => !furnitureIdSet.has(f.id)),
+        landscape: get().landscape.filter((l) => !landscapeIdSet.has(l.id)),
+        selection: null,
+      });
     }
   },
 
@@ -596,61 +699,112 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
         });
         break;
       }
-      case 'opening': {
-        const geo = getLayoutGeometry(get(), get().activeLevelId);
-        const wall = geo.walls.find((w) => w.id === clip.opening.wallId);
-        if (!wall) break;
-        const len = wallLength(wall);
-        const width = clip.opening.width;
-        const nudgeAlongWall = 0.5;
-        let nextOffset = clip.opening.offset + nudgeAlongWall;
-        if (nextOffset + width > len) {
-          nextOffset = Math.max(0, len - width);
-        }
-        const opening: Opening = {
-          ...clip.opening,
-          id: uuidv4(),
-          offset: nextOffset,
-        };
-        const clamped = clampOpeningOnWall(opening, len);
-        const placed = { ...opening, offset: clamped.offset, width: clamped.width };
+      case 'openings': {
         const layout = get().activeLevelId;
         const openingsGeo = getLayoutGeometry(get(), layout);
+        const newOpenings: Opening[] = [];
+        for (const src of clip.openings) {
+          const wall = openingsGeo.walls.find((w) => w.id === src.wallId);
+          if (!wall) continue;
+          const len = wallLength(wall);
+          const width = src.width;
+          let nextOffset = src.offset + offset.x;
+          if (nextOffset + width > len) {
+            nextOffset = Math.max(0, len - width);
+          }
+          const opening: Opening = { ...src, id: uuidv4(), offset: nextOffset };
+          const clamped = clampOpeningOnWall(opening, len);
+          newOpenings.push({ ...opening, offset: clamped.offset, width: clamped.width });
+        }
+        if (newOpenings.length === 0) break;
         set({
           ...patchActiveLevel(get(), {
-            openings: [...openingsGeo.openings, placed],
+            openings: [...openingsGeo.openings, ...newOpenings],
           }),
-          selection: { type: 'opening', id: placed.id },
+          selection: { type: 'opening', ids: newOpenings.map((o) => o.id) },
         });
         break;
       }
       case 'furniture': {
-        const item: Furniture = {
-          ...clip.item,
+        const items: Furniture[] = clip.items.map((src) => ({
+          ...src,
           id: uuidv4(),
           position: {
-            x: clip.item.position.x + offset.x,
-            y: clip.item.position.y + offset.y,
+            x: src.position.x + offset.x,
+            y: src.position.y + offset.y,
           },
-        };
+        }));
         set({
-          furniture: [...get().furniture, item],
-          selection: { type: 'furniture', id: item.id },
+          furniture: [...get().furniture, ...items],
+          selection: { type: 'furniture', ids: items.map((f) => f.id) },
         });
         break;
       }
       case 'landscape': {
-        const item: LandscapeElement = {
-          ...clip.item,
+        const items: LandscapeElement[] = clip.items.map((src) => ({
+          ...src,
           id: uuidv4(),
           position: {
-            x: clip.item.position.x + offset.x,
-            y: clip.item.position.y + offset.y,
+            x: src.position.x + offset.x,
+            y: src.position.y + offset.y,
           },
-        };
+        }));
         set({
-          landscape: [...get().landscape, item],
-          selection: { type: 'landscape', id: item.id },
+          landscape: [...get().landscape, ...items],
+          selection: { type: 'landscape', ids: items.map((l) => l.id) },
+        });
+        break;
+      }
+      case 'mixed': {
+        const idMap = new Map<string, string>();
+        const newWalls = clip.walls.map((w) => {
+          const id = uuidv4();
+          idMap.set(w.id, id);
+          return {
+            ...w,
+            id,
+            start: { x: w.start.x + offset.x, y: w.start.y + offset.y },
+            end: { x: w.end.x + offset.x, y: w.end.y + offset.y },
+          };
+        });
+        const newOpenings = clip.openings
+          .map((o) => {
+            const wallId = idMap.get(o.wallId) ?? o.wallId;
+            const wall =
+              newWalls.find((w) => w.id === wallId) ?? geo.walls.find((w) => w.id === wallId);
+            if (!wall) return null;
+            const len = wallLength(wall);
+            const opening: Opening = { ...o, id: uuidv4(), wallId };
+            const clamped = clampOpeningOnWall(opening, len);
+            return { ...opening, offset: clamped.offset, width: clamped.width };
+          })
+          .filter((o): o is Opening => o !== null);
+        const newFurniture = clip.furniture.map((f) => ({
+          ...f,
+          id: uuidv4(),
+          position: { x: f.position.x + offset.x, y: f.position.y + offset.y },
+        }));
+        const newLandscape = clip.landscape.map((l) => ({
+          ...l,
+          id: uuidv4(),
+          position: { x: l.position.x + offset.x, y: l.position.y + offset.y },
+        }));
+        const layout = get().activeLevelId;
+        const geo = getLayoutGeometry(get(), layout);
+        set({
+          ...patchActiveLevel(get(), {
+            walls: [...geo.walls, ...newWalls],
+            openings: [...geo.openings, ...newOpenings],
+          }),
+          furniture: [...get().furniture, ...newFurniture],
+          landscape: [...get().landscape, ...newLandscape],
+          selection: {
+            type: 'mixed',
+            wallIds: newWalls.map((w) => w.id),
+            openingIds: newOpenings.map((o) => o.id),
+            furnitureIds: newFurniture.map((f) => f.id),
+            landscapeIds: newLandscape.map((l) => l.id),
+          },
         });
         break;
       }
@@ -914,8 +1068,32 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
             }
           : null;
     } else if (sel?.type === 'opening') {
-      const opening = geo.openings.find((o) => o.id === sel.id);
-      if (opening?.wallId === id) nextSelection = null;
+      const ids = sel.ids.filter((oid) => {
+        const opening = geo.openings.find((o) => o.id === oid);
+        return opening && opening.wallId !== id;
+      });
+      nextSelection = ids.length > 0 ? { type: 'opening', ids } : null;
+    } else if (sel?.type === 'mixed') {
+      const wallIds = sel.wallIds.filter((x) => x !== id);
+      const openingIds = sel.openingIds.filter((oid) => {
+        const opening = geo.openings.find((o) => o.id === oid);
+        return opening && opening.wallId !== id;
+      });
+      if (
+        wallIds.length + openingIds.length + sel.furnitureIds.length + sel.landscapeIds.length ===
+        0
+      ) {
+        nextSelection = null;
+      } else {
+        nextSelection = {
+          type: 'mixed',
+          wallIds,
+          openingIds,
+          furnitureIds: sel.furnitureIds,
+          landscapeIds: sel.landscapeIds,
+          focus: sel.focus?.id === id ? undefined : sel.focus,
+        };
+      }
     }
 
     set({
@@ -993,7 +1171,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
 
     set({
       ...patchActiveLevel(get(), { openings: [...geo.openings, opening] }),
-      selection: { type: 'opening', id: opening.id },
+      selection: { type: 'opening', ids: [opening.id] },
     });
     return opening.id;
   },
@@ -1028,7 +1206,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       ...patchActiveLevel(get(), {
         openings: geo.openings.filter((o) => o.id !== id),
       }),
-      selection: sel?.type === 'opening' && sel.id === id ? null : sel,
+      selection: sel ? pruneSelection(sel, id, 'opening') : null,
     });
   },
 
@@ -1054,7 +1232,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     get().recordHistory();
     set({
       furniture: [...get().furniture, item],
-      selection: { type: 'furniture', id: item.id },
+      selection: { type: 'furniture', ids: [item.id] },
     });
     return item.id;
   },
@@ -1075,7 +1253,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     const sel = get().selection;
     set({
       furniture: get().furniture.filter((f) => f.id !== id),
-      selection: sel?.type === 'furniture' && sel.id === id ? null : sel,
+      selection: sel ? pruneSelection(sel, id, 'furniture') : null,
     });
   },
 
@@ -1094,7 +1272,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     get().recordHistory();
     set({
       landscape: [...get().landscape, item],
-      selection: { type: 'landscape', id: item.id },
+      selection: { type: 'landscape', ids: [item.id] },
     });
     return item.id;
   },
@@ -1115,7 +1293,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     const sel = get().selection;
     set({
       landscape: get().landscape.filter((l) => l.id !== id),
-      selection: sel?.type === 'landscape' && sel.id === id ? null : sel,
+      selection: sel ? pruneSelection(sel, id, 'landscape') : null,
     });
   },
 

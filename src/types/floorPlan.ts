@@ -175,10 +175,18 @@ export type FloorPlan = {
 
 export type Selection =
   | { type: 'walls'; ids: string[]; focus?: { id: string; anchor: 'start' | 'end' } }
-  | { type: 'opening'; id: string }
-  | { type: 'furniture'; id: string }
-  | { type: 'landscape'; id: string }
+  | { type: 'opening'; ids: string[] }
+  | { type: 'furniture'; ids: string[] }
+  | { type: 'landscape'; ids: string[] }
   | { type: 'light'; id: string }
+  | {
+      type: 'mixed';
+      wallIds: string[];
+      openingIds: string[];
+      furnitureIds: string[];
+      landscapeIds: string[];
+      focus?: { type: 'wall'; id: string; anchor: 'start' | 'end' };
+    }
   | null;
 
 export const DEFAULT_TRACE_PARAMS: TraceParams = {

@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
 import { useActiveLayoutGeometry } from '../hooks/useActiveLayoutGeometry';
 import { LIGHT_KIND_LABELS } from '../lib/lights/defaults';
-import { getSelectedWallIds } from '../lib/geometry/selection';
+import {
+  getSelectedFurnitureIds,
+  getSelectedLandscapeIds,
+  getSelectedOpeningIds,
+  getSelectedWallIds,
+} from '../lib/geometry/selection';
 import { formatLength, wallLength } from '../lib/geometry/vectors';
 import {
   FURNITURE_LABELS,
@@ -34,6 +39,7 @@ export function PropertyPanel() {
   const selection = useFloorPlanStore((s) => s.selection);
   const setWallSelection = useFloorPlanStore((s) => s.setWallSelection);
   const deleteSelectedWalls = useFloorPlanStore((s) => s.deleteSelectedWalls);
+  const deleteSelection = useFloorPlanStore((s) => s.deleteSelection);
   const gridEnabled = useFloorPlanStore((s) => s.gridEnabled);
   const setGridEnabled = useFloorPlanStore((s) => s.setGridEnabled);
   const gridSize = useFloorPlanStore((s) => s.gridSize);
@@ -91,26 +97,33 @@ export function PropertyPanel() {
   };
 
   const selectedWallIds = getSelectedWallIds(selection);
+  const selectedOpeningIds = getSelectedOpeningIds(selection);
+  const selectedFurnitureIds = getSelectedFurnitureIds(selection);
+  const selectedLandscapeIds = getSelectedLandscapeIds(selection);
   const focus =
-    selection?.type === 'walls' && selection.focus ? selection.focus : null;
+    selection?.type === 'walls'
+      ? selection.focus
+      : selection?.type === 'mixed' && selection.focus?.type === 'wall'
+        ? { id: selection.focus.id, anchor: selection.focus.anchor }
+        : null;
   const selectedWall =
-    focus && selection?.type === 'walls'
+    focus && (selection?.type === 'walls' || selection?.type === 'mixed')
       ? walls.find((w) => w.id === focus.id)
       : selectedWallIds.length === 1
         ? walls.find((w) => w.id === selectedWallIds[0])
         : null;
   const wallAnchor = focus?.anchor ?? 'start';
   const selectedOpening =
-    selection?.type === 'opening'
-      ? openings.find((o) => o.id === selection.id)
+    selectedOpeningIds.length === 1
+      ? openings.find((o) => o.id === selectedOpeningIds[0])
       : null;
   const selectedFurniture =
-    selection?.type === 'furniture'
-      ? furniture.find((f) => f.id === selection.id)
+    selectedFurnitureIds.length === 1
+      ? furniture.find((f) => f.id === selectedFurnitureIds[0])
       : null;
   const selectedLandscape =
-    selection?.type === 'landscape'
-      ? landscape.find((l) => l.id === selection.id)
+    selectedLandscapeIds.length === 1
+      ? landscape.find((l) => l.id === selectedLandscapeIds[0])
       : null;
   const selectedLight =
     selection?.type === 'light'
@@ -224,11 +237,62 @@ export function PropertyPanel() {
         </div>
       )}
 
+      {selection?.type === 'mixed' && (
+        <div className="panel-block">
+          <h3>Selection</h3>
+          <ul className="readout">
+            {selectedWallIds.length > 0 && <li>{selectedWallIds.length} walls</li>}
+            {selectedOpeningIds.length > 0 && (
+              <li>
+                {selectedOpeningIds.length} door
+                {selectedOpeningIds.length === 1 ? '' : 's'}/window
+                {selectedOpeningIds.length === 1 ? '' : 's'}
+              </li>
+            )}
+            {selectedFurnitureIds.length > 0 && (
+              <li>{selectedFurnitureIds.length} furniture</li>
+            )}
+            {selectedLandscapeIds.length > 0 && (
+              <li>{selectedLandscapeIds.length} landscape</li>
+            )}
+          </ul>
+          <p className="hint">
+            Drag to move walls and furniture. Shift+click to add or remove items. Delete removes
+            all selected.
+          </p>
+          <button type="button" className="toolbar-btn danger" onClick={deleteSelection}>
+            Delete selected
+          </button>
+        </div>
+      )}
+
       {selectedWallIds.length > 1 && selection?.type === 'walls' && (
         <div className="panel-block">
           <h3>{selectedWallIds.length} walls selected</h3>
           <p className="hint">Drag to move on the lot. ⌘A selects all. Delete or Backspace removes selection.</p>
           <button type="button" className="toolbar-btn danger" onClick={deleteSelectedWalls}>
+            Delete selected
+          </button>
+        </div>
+      )}
+
+      {selectedOpeningIds.length > 1 && selection?.type === 'opening' && (
+        <div className="panel-block">
+          <h3>
+            {selectedOpeningIds.length} openings selected
+          </h3>
+          <p className="hint">Delete or Backspace removes all selected doors and windows.</p>
+          <button type="button" className="toolbar-btn danger" onClick={deleteSelection}>
+            Delete selected
+          </button>
+        </div>
+      )}
+
+      {selectedFurnitureIds.length > 1 && selection?.type === 'furniture' && (
+        <div className="panel-block">
+          <h3>{selectedFurnitureIds.length} furniture selected</h3>
+          <p className="hint">Drag any selected piece to move the group together.</p>
+          <button type="button" className="toolbar-btn danger" onClick={deleteSelection}>
             Delete selected
           </button>
         </div>

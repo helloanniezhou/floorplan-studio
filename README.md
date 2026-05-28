@@ -1,4 +1,4 @@
-# Dreamome
+# Dreamore
 
 **Turn a photo or sketch into a measured floor plan — in your browser, in minutes.**
 
@@ -8,7 +8,7 @@ Upload a plan image, trace walls with snap-to-grid tools, drop in doors, furnitu
 
 ## Why it exists
 
-Most floor plan tools are either too heavy (full CAD) or too dumb (static image markup). Dreamome sits in the middle: **fast enough for real projects**, **visual enough to feel the space**, and **light enough to run entirely in the browser**.
+Most floor plan tools are either too heavy (full CAD) or too dumb (static image markup). Dreamore sits in the middle: **fast enough for real projects**, **visual enough to feel the space**, and **light enough to run entirely in the browser**.
 
 Built for homeowners, interior designers, and anyone who needs a quick, editable layout — not a construction document set.
 
@@ -35,7 +35,7 @@ Built for homeowners, interior designers, and anyone who needs a quick, editable
 
 ## How it works
 
-1. **Open a project** — start fresh or pick one from your Dreamome home screen  
+1. **Open a project** — start fresh or pick one from your Dreamore home screen  
 2. **Upload a plan** — Settings → **Plan image** → upload & set scale  
 3. **Draw the layout** — walls, openings, furniture from the left toolbar  
 4. **Roof & lights** — switch to **Roof plan** for the roof outline; use **Lighting** for fixtures  
@@ -100,6 +100,19 @@ React 19 · TypeScript · Vite · react-konva · Zustand · Three.js · Supabase
 ## Deploy
 
 Static SPA → `dist/`. Works on Vercel out of the box (`vercel.json` included).
+
+**Vercel environment variables** (required for cloud projects and Google sign-in — Vite bakes these in at build time):
+
+| Name | Value |
+|------|--------|
+| `VITE_SUPABASE_URL` | Project URL from [Supabase → Settings → API](https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/settings/api) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | **Publishable** or **anon** key from the same page (not the service role key) |
+
+1. Vercel → your project → **Settings** → **Environment Variables** → add both for **Production** (and **Preview** if you use preview URLs).
+2. **Deployments** → ⋮ on latest → **Redeploy** (a new build is required after adding vars).
+3. Supabase → **Authentication** → **URL configuration**: add `https://<your-vercel-domain>` to **Site URL** and **Redirect URLs** (same values you use for local dev, e.g. `http://localhost:5173`).
+
+Optional: `VITE_GEMINI_API_KEY` for AI photo render in the 3D viewer.
 
 Repo: [helloanniezhou/floorplan-studio](https://github.com/helloanniezhou/floorplan-studio)
 
