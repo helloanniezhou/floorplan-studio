@@ -23,6 +23,7 @@ export function ProjectsPage({
     cloudMode,
     user,
     signInWithGoogle,
+    signOut,
     fetchProjectList,
     loadProject,
     removeProject,
@@ -88,7 +89,12 @@ export function ProjectsPage({
       <header className="projects-header">
         <div>
           <h2>Projects</h2>
-          <p className="muted">Account: {userLabel}</p>
+          <div className="projects-account">
+            <span className="projects-account-email">{userLabel}</span>
+            <button type="button" className="action-bar-btn" onClick={() => void signOut()}>
+              Sign out
+            </button>
+          </div>
         </div>
         <div className="projects-header-actions">
           <button

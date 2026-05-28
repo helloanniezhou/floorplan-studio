@@ -421,6 +421,19 @@ body {
   gap: 0.45rem;
 }
 
+.projects-account {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.projects-account-email {
+  font-size: 0.85rem;
+  color: #57534e;
+}
+
 .projects-empty {
   display: flex;
   flex-direction: column;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProjectPersistence } from '../hooks/useProjectPersistence';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { SaveAsDialog } from './SaveAsDialog';
@@ -21,6 +21,8 @@ function saveStatusLabel(status: string): string {
 export function ProjectControls() {
   const {
     storageReady,
+    authEnabled,
+    authLoading,
     cloudMode,
     projectId,
     projectName,
@@ -39,10 +41,20 @@ export function ProjectControls() {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(projectName);
 
+  useEffect(() => {
+    setNameDraft(projectName);
+  }, [projectName]);
+
   if (!storageReady) {
+    const loadingLabel =
+      authEnabled && authLoading
+        ? 'Checking login…'
+        : cloudMode
+          ? 'Loading saved plans…'
+          : 'Preparing editor…';
     return (
       <div className="project-controls">
-        <span className="project-status muted">Loading saved plans…</span>
+        <span className="project-status muted">{loadingLabel}</span>
       </div>
     );
   }

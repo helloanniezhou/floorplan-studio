@@ -208,11 +208,8 @@ export function useProjectPersistence() {
 
     async function hydrate() {
       if (auth.enabled && auth.loading) return;
-      if (auth.enabled && !auth.user) {
-        useFloorPlanStore.setState({ storageReady: false, saveStatus: 'saved' });
-        return;
-      }
 
+      try {
       if (cloudMode) {
         await ensureLocalProjectsMigratedToCloud();
         if (cancelled) return;
@@ -297,6 +294,16 @@ export function useProjectPersistence() {
           lastSavedFingerprint.current = planFingerprint(useFloorPlanStore.getState().exportPlan());
           await persistCurrent('Untitled plan');
         }
+      }
+      } catch {
+        if (cancelled) return;
+        const id = uuidv4();
+        useFloorPlanStore.setState({
+          projectId: id,
+          projectName: 'Untitled plan',
+          storageReady: true,
+          saveStatus: 'error',
+        });
       }
     }
 

@@ -58,8 +58,6 @@ export function Toolbar() {
 
   return (
     <aside className="toolbar">
-      <h1 className="toolbar-title">Floor Plan Studio</h1>
-
       <div className="toolbar-scroll">
         <CollapsibleToolbarSection id="tools" title="Tools" defaultOpen>
           {DRAWING_TOOLS.map((t) => {

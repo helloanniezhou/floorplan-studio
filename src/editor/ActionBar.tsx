@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
-import { AuthControls } from './AuthControls';
 import { PlanUploadControls } from './PlanUploadControls';
 import { ProjectControls } from './ProjectControls';
 
@@ -70,10 +69,6 @@ export function ActionBar({ projectsView, onToggleProjectsView }: Props) {
         >
           Redo
         </button>
-      </div>
-
-      <div className="action-bar-group">
-        <AuthControls />
       </div>
 
       <div className="action-bar-group">
