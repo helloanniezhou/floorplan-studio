@@ -8,9 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "db:link": "supabase link --project-ref zqktwmikwmaicooawquc",
-    "db:push": "supabase db push --linked --yes",
-    "db:setup": "supabase db push --linked --yes"
+    "db:link": "npx supabase link --project-ref zqktwmikwmaicooawquc",
+    "db:push": "npx supabase db push --linked --yes",
+    "db:setup": "npx supabase db push --linked --yes"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
