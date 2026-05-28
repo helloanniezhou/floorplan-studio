@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useFloorPlanStore } from '../../store/floorPlanStore';
-import { formatLength } from '../../lib/geometry/vectors';
-import type { LotSize } from '../../types/floorPlan';
+import { useFloorPlanStore } from '../store/floorPlanStore';
+import { formatLength } from '../lib/geometry/vectors';
+import type { LotSize } from '../types/floorPlan';
 
-function defaultLotForUnit(unit: 'ft' | 'm'): LotSize {
+export function defaultLotForUnit(unit: 'ft' | 'm'): LotSize {
   return unit === 'ft' ? { width: 50, depth: 100 } : { width: 15, depth: 30 };
 }
 
-export function LotSizeSettingsPanel() {
+export function LotSizeEditor() {
   const unit = useFloorPlanStore((s) => s.unit);
   const lotSize = useFloorPlanStore((s) => s.lotSize);
   const setLotSize = useFloorPlanStore((s) => s.setLotSize);
@@ -46,15 +46,12 @@ export function LotSizeSettingsPanel() {
   };
 
   const area =
-    enabled && lotSize ? (lotSize.width * lotSize.depth).toLocaleString(undefined, { maximumFractionDigits: 1 }) : null;
+    enabled && lotSize
+      ? (lotSize.width * lotSize.depth).toLocaleString(undefined, { maximumFractionDigits: 1 })
+      : null;
 
   return (
     <>
-      <p className="hint">
-        Set the property lot dimensions. A dashed boundary is drawn on the plan from the origin (top-left of
-        the lot).
-      </p>
-
       <label className="field row lot-enable-row">
         <input
           type="checkbox"
@@ -68,7 +65,7 @@ export function LotSizeSettingsPanel() {
         <>
           <div className="lot-dimension-fields">
             <label className="field">
-              <span>Width ({unit})</span>
+              <span>Lot width ({unit})</span>
               <input
                 type="number"
                 min={0.1}
@@ -76,10 +73,13 @@ export function LotSizeSettingsPanel() {
                 value={widthDraft || (lotSize ? String(lotSize.width) : '')}
                 onChange={(e) => setWidthDraft(e.target.value)}
                 onBlur={applyDimensions}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') applyDimensions();
+                }}
               />
             </label>
             <label className="field">
-              <span>Depth ({unit})</span>
+              <span>Lot depth ({unit})</span>
               <input
                 type="number"
                 min={0.1}
@@ -87,13 +87,12 @@ export function LotSizeSettingsPanel() {
                 value={depthDraft || (lotSize ? String(lotSize.depth) : '')}
                 onChange={(e) => setDepthDraft(e.target.value)}
                 onBlur={applyDimensions}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') applyDimensions();
+                }}
               />
             </label>
           </div>
-
-          <button type="button" className="toolbar-btn" onClick={applyDimensions}>
-            Apply dimensions
-          </button>
 
           {lotSize && (
             <p className="readout lot-readout">
@@ -107,28 +106,8 @@ export function LotSizeSettingsPanel() {
               )}
             </p>
           )}
-
-          <button
-            type="button"
-            className="toolbar-btn"
-            onClick={() => {
-              const next = defaultLotForUnit(unit);
-              setLotSize(next);
-              syncDrafts(next);
-            }}
-          >
-            Reset to typical size
-          </button>
         </>
       )}
     </>
   );
-}
-
-export function formatLotSizeSummary(
-  lotSize: LotSize | null,
-  unit: 'ft' | 'm',
-): string {
-  if (!lotSize) return 'Not set';
-  return `${formatLength(lotSize.width, unit)} × ${formatLength(lotSize.depth, unit)}`;
 }

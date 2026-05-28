@@ -20,6 +20,7 @@ const DRAWING_TOOLS = [
 
 const FURNITURE_ITEMS: { kind: FurnitureKind; icon: string }[] = [
   { kind: 'kitchenCounter', icon: '▬' },
+  { kind: 'kitchenCabinet', icon: '▴' },
   { kind: 'sink', icon: '◯' },
   { kind: 'toilet', icon: '⌂' },
   { kind: 'sectionalSofa', icon: '⊔' },

@@ -3,15 +3,13 @@ import { useFloorPlanStore } from '../store/floorPlanStore';
 import { SUN_TIME_OPTIONS } from '../lib/compass/orientation';
 import { SettingsModal } from './SettingsModal';
 import { UnitsSettingsPanel } from './settings/UnitsSettingsPanel';
-import { LotSizeSettingsPanel, formatLotSizeSummary } from './settings/LotSizeSettingsPanel';
 import { CompassSettings } from './CompassSettings';
 import { PlanImageSettingsPanel, planImageSummary } from './settings/PlanImageSettingsPanel';
 
-type SettingsSection = 'units' | 'lot' | 'planImage' | 'orientation' | null;
+type SettingsSection = 'units' | 'planImage' | 'orientation' | null;
 
 const MENU: { id: SettingsSection; label: string }[] = [
   { id: 'units', label: 'Units' },
-  { id: 'lot', label: 'Lot size' },
   { id: 'planImage', label: 'Plan image' },
   { id: 'orientation', label: 'Orientation & sun' },
 ];
@@ -26,7 +24,6 @@ export function SidebarSettings() {
   const [activeSection, setActiveSection] = useState<SettingsSection>(null);
 
   const unit = useFloorPlanStore((s) => s.unit);
-  const lotSize = useFloorPlanStore((s) => s.lotSize);
   const northAngleDeg = useFloorPlanStore((s) => s.northAngleDeg);
   const sunTime = useFloorPlanStore((s) => s.sunTime);
   const backgroundImage = useFloorPlanStore((s) => s.backgroundImage);
@@ -43,8 +40,6 @@ export function SidebarSettings() {
     switch (id) {
       case 'units':
         return unit === 'ft' ? 'Feet' : 'Meters';
-      case 'lot':
-        return formatLotSizeSummary(lotSize, unit);
       case 'planImage':
         return planImageSummary(backgroundImage, backgroundVisible);
       case 'orientation':
@@ -86,7 +81,6 @@ export function SidebarSettings() {
 
       <SettingsModal open={activeSection !== null} title={modalTitle} onClose={closeModal}>
         {activeSection === 'units' && <UnitsSettingsPanel />}
-        {activeSection === 'lot' && <LotSizeSettingsPanel />}
         {activeSection === 'planImage' && <PlanImageSettingsPanel />}
         {activeSection === 'orientation' && <CompassSettings />}
       </SettingsModal>

@@ -10,6 +10,8 @@ import { bedDimensionsForSize, DEFAULT_BED_SIZE } from './beds';
 const FURNITURE_DEFAULTS_FT: Record<FurnitureKind, PlaceableDimensions> = {
   /** 10' base run, 24" deep, 36" high */
   kitchenCounter: { width: 10, depth: 2, height: 3 },
+  /** 30" wide upper cabinet, 12" deep, 30" tall — hangs from wall top in 3D */
+  kitchenCabinet: { width: 2.5, depth: 1, height: 2.5 },
   /** 33" sink base, standard 24" counter depth */
   sink: { width: 2.75, depth: 1.75, height: 3 },
   /** ~30" × 30" clear floor space, standard height */
@@ -82,6 +84,7 @@ export const LANDSCAPE_DEFAULTS: Record<LandscapeKind, PlaceableDimensions> = {
 
 export const FURNITURE_LABELS: Record<FurnitureKind, string> = {
   kitchenCounter: 'Kitchen counter',
+  kitchenCabinet: 'Kitchen cabinet',
   sink: 'Sink',
   toilet: 'Toilet',
   sectionalSofa: 'Sectional sofa',
@@ -105,6 +108,7 @@ export const LANDSCAPE_LABELS: Record<LandscapeKind, string> = {
 
 export const FURNITURE_COLORS: Record<FurnitureKind, string> = {
   kitchenCounter: '#d4c4a8',
+  kitchenCabinet: '#e7e5e4',
   sink: '#94a3b8',
   toilet: '#e2e8f0',
   sectionalSofa: '#78716c',

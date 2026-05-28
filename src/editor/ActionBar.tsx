@@ -1,14 +1,54 @@
 import { useEffect } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
-import { PlanUploadControls } from './PlanUploadControls';
 import { ProjectControls } from './ProjectControls';
 
+function UndoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M9 14 4 9l5-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M20 20v-7a4 4 0 0 0-4-4H4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function RedoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M15 14l5-5-5-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4 20v-7a4 4 0 0 1 4-4h12"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 type Props = {
-  projectsView: boolean;
-  onToggleProjectsView: () => void;
+  onBackToProjects?: () => void;
 };
 
-export function ActionBar({ projectsView, onToggleProjectsView }: Props) {
+export function ActionBar({ onBackToProjects }: Props) {
   const show3DPreview = useFloorPlanStore((s) => s.show3DPreview);
   const setShow3DPreview = useFloorPlanStore((s) => s.setShow3DPreview);
   const undoStackLength = useFloorPlanStore((s) => s.undoStack.length);
@@ -42,32 +82,27 @@ export function ActionBar({ projectsView, onToggleProjectsView }: Props) {
 
   return (
     <header className="action-bar">
-      <ProjectControls />
-      <PlanUploadControls />
-      <div className="action-bar-group">
-        <button type="button" className="action-bar-btn" onClick={onToggleProjectsView}>
-          {projectsView ? 'Editor' : 'Projects'}
-        </button>
-      </div>
-
+      <ProjectControls onBackToProjects={onBackToProjects} />
       <div className="action-bar-group">
         <button
           type="button"
-          className="action-bar-btn"
+          className="action-bar-btn action-bar-btn--icon"
           onClick={undo}
           disabled={!canUndo}
           title="Undo (⌘Z)"
+          aria-label="Undo"
         >
-          Undo
+          <UndoIcon />
         </button>
         <button
           type="button"
-          className="action-bar-btn"
+          className="action-bar-btn action-bar-btn--icon"
           onClick={redo}
           disabled={!canRedo}
           title="Redo (⌘⇧Z)"
+          aria-label="Redo"
         >
-          Redo
+          <RedoIcon />
         </button>
       </div>
 

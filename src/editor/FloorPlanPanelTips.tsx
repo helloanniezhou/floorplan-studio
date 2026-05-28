@@ -6,14 +6,16 @@ import {
   formatEnclosedAreaSummary,
 } from '../lib/geometry/enclosedArea';
 
-export function EnclosedAreaReadout() {
+export function FloorPlanPanelTips() {
   const walls = useFloorPlanStore((s) => s.walls);
   const selection = useFloorPlanStore((s) => s.selection);
+  const scale = useFloorPlanStore((s) => s.scale);
+  const scaleDraft = useFloorPlanStore((s) => s.scaleDraft);
   const unit = useFloorPlanStore((s) => s.unit);
 
   const selectedIds = getSelectedWallIds(selection);
 
-  const summary = useMemo(() => {
+  const enclosedSummary = useMemo(() => {
     if (selection?.type !== 'walls' || selectedIds.length === 0) {
       return null;
     }
@@ -21,11 +23,21 @@ export function EnclosedAreaReadout() {
     return formatEnclosedAreaSummary(result, unit);
   }, [walls, selection, selectedIds, unit]);
 
-  if (!summary) return null;
+  const showScaleSetupTip = scale == null && scaleDraft.pointA == null;
+  const showEnclosedTip = enclosedSummary != null;
+
+  if (!showScaleSetupTip && !showEnclosedTip) {
+    return null;
+  }
 
   return (
-    <div className="enclosed-area-readout" role="status" aria-live="polite">
-      {summary}
+    <div className="floor-plan-panel-tips" role="status" aria-live="polite">
+      {showEnclosedTip && <p className="floor-plan-tip">{enclosedSummary}</p>}
+      {showScaleSetupTip && (
+        <p className="floor-plan-tip">
+          Select Scale tool, then click two points on a known wall length.
+        </p>
+      )}
     </div>
   );
 }

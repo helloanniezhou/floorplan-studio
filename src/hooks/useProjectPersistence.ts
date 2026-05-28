@@ -50,6 +50,7 @@ function planFingerprint(plan: FloorPlan): string {
     northAngleDeg: plan.northAngleDeg,
     sunTime: plan.sunTime,
     lotSize: plan.lotSize,
+    gridSize: plan.gridSize,
     backgroundOffset: plan.backgroundOffset,
     backgroundVisible: plan.backgroundVisible,
     imageSize: plan.imageSize,
@@ -383,6 +384,7 @@ export function useProjectPersistence() {
         'northAngleDeg',
         'sunTime',
         'lotSize',
+        'gridSize',
         'backgroundOffset',
         'backgroundVisible',
       ];
@@ -548,6 +550,7 @@ export function useProjectPersistence() {
   return {
     authEnabled: auth.enabled,
     authLoading: auth.loading,
+    authError: auth.authError,
     user: auth.user,
     cloudMode,
     signInWithGoogle: auth.signInWithGoogle,

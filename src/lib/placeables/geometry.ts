@@ -1,4 +1,6 @@
-import type { Point } from '../../types/floorPlan';
+import type { Point, Wall } from '../../types/floorPlan';
+import { add, distance, projectPointOnSegment, subtract } from '../geometry/vectors';
+import { wallFaceEdgeSegments, wallFootprintPolygon } from '../geometry/wallFootprint';
 
 export type PlacedRect = {
   position: Point;
@@ -76,4 +78,71 @@ export function findRectAtPoint(
     if (pointInRect(point, items[i])) return i;
   }
   return -1;
+}
+
+/** Local origin corner (min X, min Y before rotation) in world space. */
+export function anchorCornerWorld(rect: PlacedRect): Point {
+  return rectCorners(rect)[0];
+}
+
+/**
+ * Keep the anchor corner fixed while changing width/depth (grows from local 0,0, not center).
+ */
+export function resizePlacedFromAnchorCorner(
+  item: PlacedRect,
+  patch: Partial<Pick<PlacedRect, 'width' | 'depth'>>,
+): Pick<PlacedRect, 'position' | 'width' | 'depth'> {
+  const width = patch.width ?? item.width;
+  const depth = patch.depth ?? item.depth;
+  const anchor = anchorCornerWorld(item);
+  const position = centerFromCornerAnchor(anchor, width, depth, item.rotation);
+  return { position, width, depth };
+}
+
+/** Default snap distance (world units) for furniture against wall faces. */
+export function placeableWallSnapRadius(unit: 'm' | 'ft'): number {
+  return unit === 'ft' ? 1.5 : 0.45;
+}
+
+/**
+ * Snap furniture corners to wall outer faces and footprint corners (not centerline).
+ */
+export function snapPlaceablePosition(
+  walls: Wall[],
+  item: PlacedRect,
+  proposedCenter: Point,
+  snapRadius: number,
+): Point {
+  if (snapRadius <= 0 || walls.length === 0) return proposedCenter;
+
+  const atProposed: PlacedRect = { ...item, position: proposedCenter };
+  const corners = rectCorners(atProposed);
+
+  let bestDelta: Point | null = null;
+  let bestDist = snapRadius;
+
+  const considerSnap = (corner: Point, target: Point) => {
+    const d = distance(corner, target);
+    if (d < bestDist) {
+      bestDist = d;
+      bestDelta = subtract(target, corner);
+    }
+  };
+
+  for (const wall of walls) {
+    for (const vertex of wallFootprintPolygon(wall)) {
+      for (const corner of corners) {
+        considerSnap(corner, vertex);
+      }
+    }
+
+    for (const [edgeStart, edgeEnd] of wallFaceEdgeSegments(wall)) {
+      for (const corner of corners) {
+        const proj = projectPointOnSegment(corner, edgeStart, edgeEnd);
+        considerSnap(corner, proj.point);
+      }
+    }
+  }
+
+  return bestDelta ? add(proposedCenter, bestDelta) : proposedCenter;
 }

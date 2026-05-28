@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useFloorPlanStore } from '../store/floorPlanStore';
 import { getSelectedWallIds } from '../lib/geometry/selection';
 import { formatLength, wallLength } from '../lib/geometry/vectors';
@@ -13,19 +13,41 @@ import {
   DEFAULT_BED_SIZE,
 } from '../lib/placeables/beds';
 import type { BedSize } from '../types/floorPlan';
+import {
+  furnitureBottomElevation,
+  furnitureMount,
+  furnitureTopElevation,
+} from '../lib/placeables/mount';
+import { resizePlacedFromAnchorCorner } from '../lib/placeables/geometry';
+import type { Furniture, LandscapeElement } from '../types/floorPlan';
+import { LotSizeEditor } from './LotSizeEditor';
 
 export function PropertyPanel() {
   const [minimized, setMinimized] = useState(false);
+  const [gridSizeDraft, setGridSizeDraft] = useState('');
+  const tool = useFloorPlanStore((s) => s.tool);
+  const wallDraftStart = useFloorPlanStore((s) => s.wallDraftStart);
+  const pendingLength = useFloorPlanStore((s) => s.pendingLength);
+  const setPendingLength = useFloorPlanStore((s) => s.setPendingLength);
   const selection = useFloorPlanStore((s) => s.selection);
   const setWallSelection = useFloorPlanStore((s) => s.setWallSelection);
   const deleteSelectedWalls = useFloorPlanStore((s) => s.deleteSelectedWalls);
   const gridEnabled = useFloorPlanStore((s) => s.gridEnabled);
   const setGridEnabled = useFloorPlanStore((s) => s.setGridEnabled);
+  const gridSize = useFloorPlanStore((s) => s.gridSize);
+  const setGridSize = useFloorPlanStore((s) => s.setGridSize);
+  const scale = useFloorPlanStore((s) => s.scale);
+
+  useEffect(() => {
+    setGridSizeDraft(String(gridSize));
+  }, [gridSize]);
+  const setTool = useFloorPlanStore((s) => s.setTool);
   const walls = useFloorPlanStore((s) => s.walls);
   const openings = useFloorPlanStore((s) => s.openings);
   const furniture = useFloorPlanStore((s) => s.furniture) ?? [];
   const landscape = useFloorPlanStore((s) => s.landscape) ?? [];
   const unit = useFloorPlanStore((s) => s.unit);
+  const wallHeight = useFloorPlanStore((s) => s.wallHeight);
 
   const updateWall = useFloorPlanStore((s) => s.updateWall);
   const updateWallLength = useFloorPlanStore((s) => s.updateWallLength);
@@ -36,6 +58,34 @@ export function PropertyPanel() {
   const deleteFurniture = useFloorPlanStore((s) => s.deleteFurniture);
   const updateLandscape = useFloorPlanStore((s) => s.updateLandscape);
   const deleteLandscape = useFloorPlanStore((s) => s.deleteLandscape);
+
+  const patchFurnitureSize = (
+    item: Furniture,
+    patch: Partial<{ width: number; depth: number; height: number }>,
+  ) => {
+    if (patch.width !== undefined || patch.depth !== undefined) {
+      updateFurniture(item.id, {
+        ...resizePlacedFromAnchorCorner(item, patch),
+        ...(patch.height !== undefined ? { height: patch.height } : {}),
+      });
+      return;
+    }
+    updateFurniture(item.id, patch);
+  };
+
+  const patchLandscapeSize = (
+    item: LandscapeElement,
+    patch: Partial<{ width: number; depth: number; height: number }>,
+  ) => {
+    if (patch.width !== undefined || patch.depth !== undefined) {
+      updateLandscape(item.id, {
+        ...resizePlacedFromAnchorCorner(item, patch),
+        ...(patch.height !== undefined ? { height: patch.height } : {}),
+      });
+      return;
+    }
+    updateLandscape(item.id, patch);
+  };
 
   const selectedWallIds = getSelectedWallIds(selection);
   const focus =
@@ -61,6 +111,16 @@ export function PropertyPanel() {
       : null;
 
   const selectedPlaceable = selectedFurniture ?? selectedLandscape;
+  const showPlanProperties = selection == null;
+
+  const applyGridSize = () => {
+    const next = parseFloat(gridSizeDraft);
+    if (!(next > 0)) {
+      setGridSizeDraft(String(gridSize));
+      return;
+    }
+    if (Math.abs(next - gridSize) > 1e-9) setGridSize(next);
+  };
 
   return (
     <aside className={`property-panel ${minimized ? 'property-panel--minimized' : ''}`}>
@@ -78,14 +138,84 @@ export function PropertyPanel() {
 
       {!minimized && (
         <div className="property-panel-body">
-      <label className="field">
-        <span>Grid snap</span>
-        <input
-          type="checkbox"
-          checked={gridEnabled}
-          onChange={(e) => setGridEnabled(e.target.checked)}
-        />
-      </label>
+      {showPlanProperties && (
+        <div className="panel-block">
+          <h3>Plan</h3>
+
+          <h4 className="panel-subheading">Lot size</h4>
+          <LotSizeEditor />
+
+          <h4 className="panel-subheading">Grid</h4>
+          <label className="field row lot-enable-row">
+            <input
+              type="checkbox"
+              checked={gridEnabled}
+              onChange={(e) => setGridEnabled(e.target.checked)}
+            />
+            <span>Snap to grid</span>
+          </label>
+          <label className="field">
+            <span>Grid size ({unit})</span>
+            <input
+              type="number"
+              min={unit === 'ft' ? 0.05 : 0.01}
+              step={unit === 'ft' ? 0.05 : 0.01}
+              value={gridSizeDraft}
+              disabled={!gridEnabled}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setGridSizeDraft(raw);
+                const next = parseFloat(raw);
+                if (next > 0 && !/[.\-]$/.test(raw.trim())) {
+                  setGridSize(next);
+                }
+              }}
+              onBlur={applyGridSize}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  applyGridSize();
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+            />
+          </label>
+
+          <h4 className="panel-subheading">Scale</h4>
+          {scale ? (
+            <p className="readout">
+              {scale.pixelsPerUnit.toFixed(1)} px / {unit}
+            </p>
+          ) : (
+            <>
+              <p className="readout muted">Not set</p>
+              <button type="button" className="toolbar-btn" onClick={() => setTool('scale')}>
+                Set scale…
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {tool === 'wall' && wallDraftStart && (
+        <div className="panel-block">
+          <h3>Drawing wall</h3>
+          <label className="field">
+            <span>Length ({unit})</span>
+            <input
+              type="number"
+              min={0.01}
+              step={0.01}
+              value={pendingLength}
+              placeholder="optional — Enter to fix"
+              onChange={(e) => setPendingLength(e.target.value)}
+            />
+          </label>
+          <p className="hint">
+            Snap to green corners · Shift locks 45°/90° · Esc to stop
+          </p>
+        </div>
+      )}
 
       {selectedWallIds.length > 1 && selection?.type === 'walls' && (
         <div className="panel-block">
@@ -280,6 +410,29 @@ export function PropertyPanel() {
               ? FURNITURE_LABELS[selectedFurniture.kind]
               : LANDSCAPE_LABELS[selectedLandscape!.kind]}
           </h3>
+          {selectedFurniture && furnitureMount(selectedFurniture) === 'top' && (
+            <>
+              <p className="hint">Wall cabinet — top aligns with wall height in 3D preview.</p>
+              <label className="field">
+                <span>Bottom elevation ({unit})</span>
+                <input
+                  type="number"
+                  readOnly
+                  value={Number(
+                    furnitureBottomElevation(selectedFurniture, wallHeight).toFixed(2),
+                  )}
+                />
+              </label>
+              <label className="field">
+                <span>Top elevation ({unit})</span>
+                <input
+                  type="number"
+                  readOnly
+                  value={Number(furnitureTopElevation(selectedFurniture, wallHeight).toFixed(2))}
+                />
+              </label>
+            </>
+          )}
           {selectedFurniture?.kind === 'bed' && (
             <label className="field">
               <span>Bed size</span>
@@ -290,9 +443,8 @@ export function PropertyPanel() {
                   const bedSize = e.target.value as BedSize;
                   const dims = bedDimensionsForSize(bedSize, unit);
                   updateFurniture(selectedFurniture.id, {
+                    ...resizePlacedFromAnchorCorner(selectedFurniture, dims),
                     bedSize,
-                    width: dims.width,
-                    depth: dims.depth,
                     height: dims.height,
                   });
                 }}
@@ -316,9 +468,9 @@ export function PropertyPanel() {
               onChange={(e) => {
                 const width = Number(e.target.value) || 0.1;
                 if (selectedFurniture) {
-                  updateFurniture(selectedFurniture.id, { width });
+                  patchFurnitureSize(selectedFurniture, { width });
                 } else {
-                  updateLandscape(selectedLandscape!.id, { width });
+                  patchLandscapeSize(selectedLandscape!, { width });
                 }
               }}
             />
@@ -335,9 +487,9 @@ export function PropertyPanel() {
               onChange={(e) => {
                 const depth = Number(e.target.value) || 0.1;
                 if (selectedFurniture) {
-                  updateFurniture(selectedFurniture.id, { depth });
+                  patchFurnitureSize(selectedFurniture, { depth });
                 } else {
-                  updateLandscape(selectedLandscape!.id, { depth });
+                  patchLandscapeSize(selectedLandscape!, { depth });
                 }
               }}
             />
@@ -353,7 +505,7 @@ export function PropertyPanel() {
                   step={0.05}
                   value={Number(selectedPlaceable.width.toFixed(2))}
                   onChange={(e) =>
-                    updateFurniture(selectedFurniture.id, {
+                    patchFurnitureSize(selectedFurniture, {
                       width: Number(e.target.value) || 0.1,
                     })
                   }
@@ -367,7 +519,7 @@ export function PropertyPanel() {
                   step={0.05}
                   value={Number(selectedPlaceable.depth.toFixed(2))}
                   onChange={(e) =>
-                    updateFurniture(selectedFurniture.id, {
+                    patchFurnitureSize(selectedFurniture, {
                       depth: Number(e.target.value) || 0.1,
                     })
                   }
@@ -376,7 +528,11 @@ export function PropertyPanel() {
             </>
           )}
           <label className="field">
-            <span>Height ({unit})</span>
+            <span>
+              {selectedFurniture && furnitureMount(selectedFurniture) === 'top'
+                ? `Cabinet height (${unit})`
+                : `Height (${unit})`}
+            </span>
             <input
               type="number"
               min={0.02}

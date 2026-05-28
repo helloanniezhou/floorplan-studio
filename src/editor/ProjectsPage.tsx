@@ -19,6 +19,7 @@ export function ProjectsPage({
   const {
     authEnabled,
     authLoading,
+    authError,
     cloudMode,
     user,
     signInWithGoogle,
@@ -119,7 +120,7 @@ export function ProjectsPage({
     );
   }
 
-  if (!cloudMode) {
+  if (authEnabled && !user) {
     return (
       <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
         <header className="projects-header">
@@ -127,15 +128,47 @@ export function ProjectsPage({
         </header>
         <div className="projects-empty">
           <p>Sign in with Google to manage projects for your account in Supabase.</p>
-          {!authEnabled && (
-            <p className="muted">
-              Supabase is not configured in this build. Add <code>VITE_SUPABASE_URL</code> and{' '}
-              <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to your <code>.env</code> file.
+          {authError && (
+            <p className="project-status error" role="alert">
+              {authError}
+              {authError.includes('API key') || authError.includes('PUBLISHABLE_KEY') ? (
+                <>
+                  {' '}
+                  Open <strong>.env</strong>, set <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> from{' '}
+                  <a href="https://supabase.com/dashboard/project/zqktwmikwmaicooawquc/settings/api">
+                    Supabase → Settings → API
+                  </a>
+                  , then restart <code>npm run dev</code>.
+                </>
+              ) : null}
+              {authError.includes('PKCE') || authError.includes('code verifier') ? (
+                <>
+                  {' '}
+                  Use the same address you started from (e.g. <strong>http://localhost:5173</strong>, not
+                  127.0.0.1), then try again.
+                </>
+              ) : null}
             </p>
           )}
           <button type="button" className="action-bar-btn primary" onClick={() => void signInWithGoogle()}>
             Continue with Google
           </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (!authEnabled) {
+    return (
+      <section className={`projects-page ${standalone ? 'projects-page--standalone' : ''}`}>
+        <header className="projects-header">
+          <h2>Projects</h2>
+        </header>
+        <div className="projects-empty">
+          <p className="muted">
+            Supabase is not configured in this build. Add <code>VITE_SUPABASE_URL</code> and{' '}
+            <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to your <code>.env</code> file.
+          </p>
         </div>
       </section>
     );

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useProjectPersistence } from '../hooks/useProjectPersistence';
-import { OpenProjectDialog } from './OpenProjectDialog';
 import { SaveAsDialog } from './SaveAsDialog';
 
 function saveStatusLabel(status: string, detail: string | null): string {
@@ -21,26 +20,24 @@ function saveStatusLabel(status: string, detail: string | null): string {
   }
 }
 
-export function ProjectControls() {
+type Props = {
+  onBackToProjects?: () => void;
+};
+
+export function ProjectControls({ onBackToProjects }: Props) {
   const {
     storageReady,
     authEnabled,
     authLoading,
     cloudMode,
-    projectId,
     projectName,
     saveStatus,
     saveDetail,
     saveNow,
     saveAs,
     renameProject,
-    loadProject,
-    createNewProject,
-    removeProject,
-    fetchProjectList,
   } = useProjectPersistence();
 
-  const [openDialog, setOpenDialog] = useState(false);
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(projectName);
@@ -73,6 +70,17 @@ export function ProjectControls() {
   return (
     <>
       <div className="project-controls">
+        {onBackToProjects && (
+          <button
+            type="button"
+            className="project-back-btn action-bar-btn"
+            onClick={onBackToProjects}
+            title="Back to projects"
+            aria-label="Back to projects"
+          >
+            ←
+          </button>
+        )}
         {editingName ? (
           <input
             className="project-name-input"
@@ -133,24 +141,6 @@ export function ProjectControls() {
           >
             Save as…
           </button>
-          <button type="button" className="action-bar-btn" onClick={() => setOpenDialog(true)}>
-            Open…
-          </button>
-          <button
-            type="button"
-            className="action-bar-btn"
-            onClick={() => {
-              if (
-                window.confirm(
-                  'Start a new plan? The current plan stays saved — you can open it again from Open.',
-                )
-              ) {
-                void createNewProject();
-              }
-            }}
-          >
-            New
-          </button>
         </div>
       </div>
 
@@ -161,14 +151,6 @@ export function ProjectControls() {
         onSave={(name) => void saveAs(name)}
       />
 
-      <OpenProjectDialog
-        open={openDialog}
-        currentId={projectId}
-        onClose={() => setOpenDialog(false)}
-        onOpen={(id) => void loadProject(id)}
-        onDelete={(id) => void removeProject(id)}
-        fetchProjects={fetchProjectList}
-      />
     </>
   );
 }

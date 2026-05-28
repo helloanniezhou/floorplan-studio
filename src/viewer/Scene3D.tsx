@@ -72,7 +72,8 @@ function WallMeshes({
     <>
       {parts.map((part, i) => {
         const depth = part.yMax - part.yMin;
-        if (depth < 0.01) return null;
+        if (depth < 0.01 || part.polygon.length < 3) return null;
+        if (part.polygon.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return null;
         return (
           <WallPartMesh
             key={`${part.wallId}-${i}`}
@@ -201,7 +202,7 @@ export function SceneContent({
         wallHeight={wallHeight}
         onDoubleClick={onDoubleClick}
       />
-      <FurnitureMeshes items={furniture} />
+      <FurnitureMeshes items={furniture} wallHeight={wallHeight} />
       <LandscapeMeshes items={landscape} />
     </>
   );

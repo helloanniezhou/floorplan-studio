@@ -13,6 +13,9 @@ import {
   LANDSCAPE_COLORS,
   LANDSCAPE_LABELS,
 } from '../lib/placeables/defaults';
+import { furnitureMount } from '../lib/placeables/mount';
+import { isRectPlaceable } from '../lib/placeables/resizeHandles';
+import { PlaceableResizeHandles } from './PlaceableResizeHandles';
 
 type Point = { x: number; y: number };
 
@@ -60,6 +63,8 @@ function RectPlaceableShape({
     item.category === 'furniture'
       ? FURNITURE_COLORS[item.kind]
       : LANDSCAPE_COLORS[item.kind];
+  const topMounted =
+    item.category === 'furniture' && furnitureMount(item) === 'top';
   const label =
     item.category === 'furniture'
       ? FURNITURE_LABELS[item.kind]
@@ -75,9 +80,10 @@ function RectPlaceableShape({
         points={toFlatPoints(displayCorners)}
         closed
         fill={fill}
-        opacity={0.75}
-        stroke={selected ? '#2563eb' : '#57534e'}
+        opacity={topMounted ? 0.55 : 0.75}
+        stroke={selected ? '#2563eb' : topMounted ? '#78716c' : '#57534e'}
         strokeWidth={(selected ? 2.5 : 1.5) / stageScale}
+        dash={topMounted ? [6 / stageScale, 4 / stageScale] : undefined}
       />
       <Text
         x={cx}
@@ -197,6 +203,34 @@ export function PlaceableShapes({
           />
         ),
       )}
+
+      {selection?.type === 'furniture' && (() => {
+        const item = furniture.find((f) => f.id === selection.id);
+        if (!item) return null;
+        return (
+          <PlaceableResizeHandles
+            key={`resize-f-${item.id}`}
+            item={item}
+            displayCorners={rectCorners(item).map((c) => toDisplay(c))}
+            stageScale={stageScale}
+            toDisplay={toDisplay}
+          />
+        );
+      })()}
+
+      {selection?.type === 'landscape' && (() => {
+        const item = landscape.find((l) => l.id === selection.id);
+        if (!item || !isRectPlaceable('landscape', item)) return null;
+        return (
+          <PlaceableResizeHandles
+            key={`resize-l-${item.id}`}
+            item={item}
+            displayCorners={rectCorners(item).map((c) => toDisplay(c))}
+            stageScale={stageScale}
+            toDisplay={toDisplay}
+          />
+        );
+      })()}
     </>
   );
 }

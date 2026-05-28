@@ -11,19 +11,11 @@ export function ScaleDialog() {
   const [lengthInput, setLengthInput] = useState('3');
 
   if (scale) {
-    return (
-      <div className="scale-banner ok">
-        Scale set: {scale.pixelsPerUnit.toFixed(1)} px / {unit}
-      </div>
-    );
+    return null;
   }
 
   if (!scaleDraft.pointA) {
-    return (
-      <div className="scale-banner">
-        Select Scale tool, then click two points on a known wall length.
-      </div>
-    );
+    return null;
   }
 
   if (!scaleDraft.pointB) {
@@ -40,7 +32,7 @@ export function ScaleDialog() {
   const pixelDist = distance(scaleDraft.pointA, scaleDraft.pointB);
 
   return (
-    <div className="scale-banner active">
+    <div className="scale-banner">
       <label>
         Known length ({unit}):
         <input

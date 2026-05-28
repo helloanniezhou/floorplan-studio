@@ -4,6 +4,7 @@ import {
   FURNITURE_COLORS,
   LANDSCAPE_COLORS,
 } from '../lib/placeables/defaults';
+import { furnitureMeshCenterY } from '../lib/placeables/mount';
 
 type MeshProps = {
   position: { x: number; y: number };
@@ -12,6 +13,7 @@ type MeshProps = {
   height: number;
   rotation: number;
   color: string;
+  centerY: number;
 };
 
 function PlaceableBoxMesh({
@@ -21,10 +23,11 @@ function PlaceableBoxMesh({
   height,
   rotation,
   color,
+  centerY,
 }: MeshProps) {
   return (
     <mesh
-      position={[position.x, height / 2, position.y]}
+      position={[position.x, centerY, position.y]}
       rotation={[0, -rotation, 0]}
       castShadow
       receiveShadow
@@ -43,7 +46,7 @@ function OvalLandscapeMesh({
   height,
   rotation,
   color,
-}: MeshProps) {
+}: Omit<MeshProps, 'centerY'>) {
   return (
     <mesh
       position={[position.x, height / 2, position.y]}
@@ -58,7 +61,13 @@ function OvalLandscapeMesh({
   );
 }
 
-export function FurnitureMeshes({ items }: { items: Furniture[] }) {
+export function FurnitureMeshes({
+  items,
+  wallHeight,
+}: {
+  items: Furniture[];
+  wallHeight: number;
+}) {
   return (
     <>
       {items.map((item) => (
@@ -70,6 +79,7 @@ export function FurnitureMeshes({ items }: { items: Furniture[] }) {
           height={item.height}
           rotation={item.rotation}
           color={FURNITURE_COLORS[item.kind]}
+          centerY={furnitureMeshCenterY(item, wallHeight)}
         />
       ))}
     </>
@@ -91,7 +101,9 @@ export function LandscapeMeshes({ items }: { items: LandscapeElement[] }) {
         if (isOvalLandscapeKind(item.kind)) {
           return <OvalLandscapeMesh key={item.id} {...props} />;
         }
-        return <PlaceableBoxMesh key={item.id} {...props} />;
+        return (
+          <PlaceableBoxMesh key={item.id} {...props} centerY={item.height / 2} />
+        );
       })}
     </>
   );

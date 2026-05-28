@@ -61,8 +61,10 @@ export function findNearestWall(
   cursor: Point,
   walls: Wall[],
   maxDist: number,
+  priorityWallIds: string[] = [],
 ): { wall: Wall; t: number; dist: number } | null {
-  let best: { wall: Wall; t: number; dist: number } | null = null;
+  const prioritySet = new Set(priorityWallIds);
+  const hits: { wall: Wall; t: number; dist: number }[] = [];
 
   for (const wall of walls) {
     const ab = subtract(wall.end, wall.start);
@@ -75,10 +77,18 @@ export function findNearestWall(
       y: wall.start.y + ab.y * t,
     };
     const dist = distance(cursor, proj);
-    if (dist <= maxDist && (!best || dist < best.dist)) {
-      best = { wall, t, dist };
+    if (dist <= maxDist) {
+      hits.push({ wall, t, dist });
     }
   }
 
-  return best;
+  if (hits.length === 0) return null;
+
+  const pickClosest = (candidates: typeof hits) =>
+    candidates.reduce((a, b) => (a.dist < b.dist ? a : b));
+
+  const priorityHits = hits.filter((h) => prioritySet.has(h.wall.id));
+  if (priorityHits.length > 0) return pickClosest(priorityHits);
+
+  return pickClosest(hits);
 }

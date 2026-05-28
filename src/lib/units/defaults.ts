@@ -66,8 +66,58 @@ export function defaultOpeningHeight(type: OpeningType, unit: 'm' | 'ft'): numbe
   return type === 'door' ? defaultDoorHeight(unit) : defaultWindowHeight(unit);
 }
 
+export function defaultGridSizeForUnit(unit: 'm' | 'ft'): number {
+  return unit === 'ft' ? GRID_STEP_FT : feetToMeters(GRID_STEP_FT);
+}
+
+/** Grid line spacing on the canvas in pixels (display space). */
+export function gridSpacingPixels(
+  gridSizeWorld: number,
+  pixelsPerUnit: number | null,
+): number {
+  if (!pixelsPerUnit) return gridSizeWorld;
+  return pixelsPerUnit * gridSizeWorld;
+}
+
+const MAX_GRID_LINES_PER_AXIS = 80;
+
+export type ViewportAxis = { min: number; max: number };
+
+/** Visible layer-coordinate range from stage pan/zoom. */
+export function visibleLayerRange(
+  stagePos: number,
+  stageScale: number,
+  viewportSize: number,
+  marginPx = 64,
+): ViewportAxis {
+  const scale = stageScale > 0 ? stageScale : 1;
+  return {
+    min: -stagePos / scale - marginPx,
+    max: (viewportSize - stagePos) / scale + marginPx,
+  };
+}
+
+/** Grid line positions along one axis (viewport-limited, uses true spacing when possible). */
+export function buildGridLinePositions(
+  gridStepPx: number,
+  axis: ViewportAxis,
+  maxLines = MAX_GRID_LINES_PER_AXIS,
+): number[] {
+  if (!(gridStepPx > 0)) return [];
+  const span = axis.max - axis.min;
+  if (span <= 0) return [];
+  const rawCount = Math.floor(span / gridStepPx) + 1;
+  const step =
+    rawCount > maxLines ? span / (maxLines - 1) : gridStepPx;
+  const start = Math.floor(axis.min / step) * step;
+  const lines: number[] = [];
+  for (let i = start; i <= axis.max + step * 0.001; i += step) {
+    if (i >= axis.min - step * 0.001) lines.push(i);
+  }
+  return lines;
+}
+
+/** @deprecated Use gridSpacingPixels with store gridSize */
 export function gridStepForUnit(unit: 'm' | 'ft', pixelsPerUnit: number | null): number {
-  const stepWorld = unit === 'ft' ? GRID_STEP_FT : feetToMeters(GRID_STEP_FT);
-  if (!pixelsPerUnit) return unit === 'ft' ? 6 : 8;
-  return pixelsPerUnit * stepWorld;
+  return gridSpacingPixels(defaultGridSizeForUnit(unit), pixelsPerUnit);
 }

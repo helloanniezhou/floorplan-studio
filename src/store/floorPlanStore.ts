@@ -31,7 +31,13 @@ import {
   LANDSCAPE_DEFAULTS,
 } from '../lib/placeables/defaults';
 import { bedDimensionsForSize, DEFAULT_BED_SIZE } from '../lib/placeables/beds';
-import { centerFromCornerAnchor } from '../lib/placeables/geometry';
+import {
+  centerFromCornerAnchor,
+  placeableWallSnapRadius,
+  snapPlaceablePosition,
+  type PlacedRect,
+} from '../lib/placeables/geometry';
+import { defaultMountForFurnitureKind } from '../lib/placeables/mount';
 import { convertWallsToWorld, clampOpeningOnWall } from '../lib/geometry/units';
 import {
   rectangleFromCorners,
@@ -44,6 +50,7 @@ import {
   orthogonalizeLines,
 } from '../lib/opencv/postProcess';
 import {
+  defaultGridSizeForUnit,
   defaultOpeningHeight,
   defaultOpeningWidth,
   defaultWallHeight,
@@ -107,6 +114,7 @@ type FloorPlanState = FloorPlan & {
   cutSelection: () => void;
   setGridEnabled: (enabled: boolean) => void;
   setPendingLength: (value: string) => void;
+  setWallDraftStart: (start: Point | null) => void;
   setTraceParams: (params: Partial<TraceParams>) => void;
   setShow3DPreview: (show: boolean) => void;
   setProjectMeta: (id: string, name: string) => void;
@@ -124,6 +132,7 @@ type FloorPlanState = FloorPlan & {
 
   setUnit: (unit: FloorPlanUnit) => void;
   setLotSize: (lotSize: LotSize | null) => void;
+  setGridSize: (gridSize: number) => void;
   setNorthAngleDeg: (deg: number) => void;
   setSunTime: (sunTime: SunTime) => void;
 
@@ -162,7 +171,11 @@ type FloorPlanState = FloorPlan & {
     dimensions?: Partial<PlaceableDimensions>,
     rotation?: number,
   ) => string;
-  updateFurniture: (id: string, patch: Partial<Furniture>) => void;
+  updateFurniture: (
+    id: string,
+    patch: Partial<Furniture>,
+    options?: { recordHistory?: boolean },
+  ) => void;
   deleteFurniture: (id: string) => void;
 
   addLandscape: (
@@ -171,7 +184,11 @@ type FloorPlanState = FloorPlan & {
     dimensions?: Partial<PlaceableDimensions>,
     rotation?: number,
   ) => string;
-  updateLandscape: (id: string, patch: Partial<LandscapeElement>) => void;
+  updateLandscape: (
+    id: string,
+    patch: Partial<LandscapeElement>,
+    options?: { recordHistory?: boolean },
+  ) => void;
   deleteLandscape: (id: string) => void;
 
   placeActiveItem: (position: Point) => string;
@@ -207,6 +224,7 @@ const initialPlan: FloorPlan = {
   northAngleDeg: DEFAULT_NORTH_ANGLE_DEG,
   sunTime: DEFAULT_SUN_TIME,
   lotSize: null,
+  gridSize: defaultGridSizeForUnit('ft'),
   backgroundOffset: { ...DEFAULT_BACKGROUND_OFFSET },
   backgroundVisible: true,
 };
@@ -501,6 +519,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
 
   setGridEnabled: (gridEnabled) => set({ gridEnabled }),
   setPendingLength: (pendingLength) => set({ pendingLength }),
+  setWallDraftStart: (wallDraftStart) => set({ wallDraftStart }),
   setTraceParams: (params) =>
     set({ traceParams: { ...get().traceParams, ...params } }),
   setShow3DPreview: (show3DPreview) => set({ show3DPreview }),
@@ -515,30 +534,26 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   },
 
   undo: () => {
-    const { undoStack, redoStack, walls, openings, scale } = get();
+    const { undoStack, redoStack } = get();
     if (undoStack.length === 0) return;
     const previous = undoStack[undoStack.length - 1];
-    const current = takeSnapshot({ walls, openings, scale });
+    const current = takeSnapshot(get());
     set({
       undoStack: undoStack.slice(0, -1),
       redoStack: [...redoStack, current].slice(-MAX_UNDO_STACK),
-      walls: previous.walls,
-      openings: previous.openings,
-      scale: previous.scale,
+      ...previous,
     });
   },
 
   redo: () => {
-    const { undoStack, redoStack, walls, openings, scale } = get();
+    const { undoStack, redoStack } = get();
     if (redoStack.length === 0) return;
     const next = redoStack[redoStack.length - 1];
-    const current = takeSnapshot({ walls, openings, scale });
+    const current = takeSnapshot(get());
     set({
       redoStack: redoStack.slice(0, -1),
       undoStack: [...undoStack, current].slice(-MAX_UNDO_STACK),
-      walls: next.walls,
-      openings: next.openings,
-      scale: next.scale,
+      ...next,
     });
   },
 
@@ -623,9 +638,9 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     const prev = get().unit;
     if (prev === unit) return;
     get().recordHistory();
-    const { walls, openings, wallHeight, scale, lotSize, backgroundOffset } = get();
+    const { walls, openings, wallHeight, scale, lotSize, gridSize, backgroundOffset } = get();
     const converted = convertPlanToUnit(
-      { walls, openings, wallHeight, scale, lotSize, backgroundOffset },
+      { walls, openings, wallHeight, scale, lotSize, gridSize, backgroundOffset },
       prev,
       unit,
     );
@@ -633,6 +648,11 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   },
 
   setLotSize: (lotSize) => set({ lotSize }),
+
+  setGridSize: (gridSize) => {
+    if (!(gridSize > 0)) return;
+    set({ gridSize });
+  },
   setNorthAngleDeg: (northAngleDeg) => set({ northAngleDeg }),
   setSunTime: (sunTime) => set({ sunTime }),
 
@@ -804,6 +824,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       height: dimensions?.height ?? defaults.height,
       rotation,
       bedSize,
+      mount: defaultMountForFurnitureKind(kind),
     };
     get().recordHistory();
     set({
@@ -813,12 +834,16 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     return item.id;
   },
 
-  updateFurniture: (id, patch) =>
+  updateFurniture: (id, patch, options) => {
+    if (options?.recordHistory !== false) {
+      get().recordHistory();
+    }
     set({
       furniture: get().furniture.map((f) =>
         f.id === id ? { ...f, ...patch } : f,
       ),
-    }),
+    });
+  },
 
   deleteFurniture: (id) => {
     get().recordHistory();
@@ -849,12 +874,16 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     return item.id;
   },
 
-  updateLandscape: (id, patch) =>
+  updateLandscape: (id, patch, options) => {
+    if (options?.recordHistory !== false) {
+      get().recordHistory();
+    }
     set({
       landscape: get().landscape.map((l) =>
         l.id === id ? { ...l, ...patch } : l,
       ),
-    }),
+    });
+  },
 
   deleteLandscape: (id) => {
     get().recordHistory();
@@ -866,8 +895,27 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
   },
 
   placeActiveItem: (clickWorld) => {
-    const { activePlaceable, addFurniture, addLandscape, unit } = get();
+    const { activePlaceable, addFurniture, addLandscape, unit, walls } = get();
     const rotation = 0;
+    const snapRadius = placeableWallSnapRadius(unit);
+
+    const snapCenter = (
+      defaults: { width: number; depth: number; height: number },
+    ): Point => {
+      const center = centerFromCornerAnchor(
+        clickWorld,
+        defaults.width,
+        defaults.depth,
+        rotation,
+      );
+      const rect: PlacedRect = {
+        position: center,
+        width: defaults.width,
+        depth: defaults.depth,
+        rotation,
+      };
+      return snapPlaceablePosition(walls, rect, center, snapRadius);
+    };
 
     if (activePlaceable.category === 'furniture') {
       const kind = activePlaceable.kind;
@@ -875,23 +923,11 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
         kind === 'bed'
           ? bedDimensionsForSize(DEFAULT_BED_SIZE, unit)
           : defaultFurnitureDimensions(kind, unit);
-      const center = centerFromCornerAnchor(
-        clickWorld,
-        defaults.width,
-        defaults.depth,
-        rotation,
-      );
-      return addFurniture(kind, center, undefined, rotation);
+      return addFurniture(kind, snapCenter(defaults), undefined, rotation);
     }
 
     const defaults = LANDSCAPE_DEFAULTS[activePlaceable.kind];
-    const center = centerFromCornerAnchor(
-      clickWorld,
-      defaults.width,
-      defaults.depth,
-      rotation,
-    );
-    return addLandscape(activePlaceable.kind, center, undefined, rotation);
+    return addLandscape(activePlaceable.kind, snapCenter(defaults), undefined, rotation);
   },
 
   setSuggestions: (suggestions) => set({ suggestions }),
@@ -996,6 +1032,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       northAngleDeg: plan.northAngleDeg ?? DEFAULT_NORTH_ANGLE_DEG,
       sunTime: plan.sunTime ?? DEFAULT_SUN_TIME,
       lotSize: plan.lotSize ?? null,
+      gridSize: plan.gridSize ?? defaultGridSizeForUnit(plan.unit ?? 'ft'),
       backgroundOffset: plan.backgroundOffset ?? { ...DEFAULT_BACKGROUND_OFFSET },
       backgroundVisible: plan.backgroundVisible ?? true,
     });
@@ -1019,6 +1056,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       northAngleDeg,
       sunTime,
       lotSize,
+      gridSize,
     } = get();
     return {
       walls,
@@ -1037,6 +1075,7 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       northAngleDeg,
       sunTime,
       lotSize,
+      gridSize,
     };
   },
 

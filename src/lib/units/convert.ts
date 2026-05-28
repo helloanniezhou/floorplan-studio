@@ -19,11 +19,20 @@ export function unitConversionFactor(from: 'm' | 'ft', to: 'm' | 'ft'): number {
 export function convertPlanToUnit(
   plan: Pick<
     FloorPlan,
-    'walls' | 'openings' | 'wallHeight' | 'scale' | 'lotSize' | 'backgroundOffset'
+    | 'walls'
+    | 'openings'
+    | 'wallHeight'
+    | 'scale'
+    | 'lotSize'
+    | 'gridSize'
+    | 'backgroundOffset'
   >,
   from: 'm' | 'ft',
   to: 'm' | 'ft',
-): Pick<FloorPlan, 'walls' | 'openings' | 'wallHeight' | 'scale' | 'lotSize' | 'backgroundOffset'> {
+): Pick<
+  FloorPlan,
+  'walls' | 'openings' | 'wallHeight' | 'scale' | 'lotSize' | 'gridSize' | 'backgroundOffset'
+> {
   const factor = unitConversionFactor(from, to);
   if (factor === 1) return plan;
 
@@ -52,6 +61,7 @@ export function convertPlanToUnit(
     wallHeight: plan.wallHeight * factor,
     scale: convertScale(plan.scale, factor),
     lotSize,
+    gridSize: plan.gridSize * factor,
     backgroundOffset: scalePoint(plan.backgroundOffset, factor),
   };
 }

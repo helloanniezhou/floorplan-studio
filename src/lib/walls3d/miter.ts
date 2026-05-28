@@ -1,5 +1,13 @@
 import type { Point } from '../../types/floorPlan';
-import { add, normalize, perpendicular, scale, subtract } from '../geometry/vectors';
+import {
+  add,
+  distance,
+  dot,
+  normalize,
+  perpendicular,
+  scale,
+  subtract,
+} from '../geometry/vectors';
 
 export type WallSegment = {
   wallId: string;
@@ -29,29 +37,87 @@ function getConnectedWalls(
   });
 }
 
+/** Max miter extension from a corner — prevents runaway joins on shallow angles. */
+function maxMiterDistance(halfThick: number, wallLen: number): number {
+  return Math.min(Math.max(halfThick * 6, 0.15), Math.max(wallLen * 2, halfThick * 6), 8);
+}
+
 function miterCorner(
   vertex: Point,
   dirA: Point,
   dirB: Point,
   halfThick: number,
   side: 1 | -1,
+  maxDist: number,
 ): Point {
   const nA = scale(perpendicular(dirA), side * halfThick);
-  const nB = scale(perpendicular(dirB), side * halfThick);
+  const bevel = add(vertex, nA);
+
+  const uA = normalize(dirA);
+  const uB = normalize(dirB);
+  if (Math.abs(dot(uA, uB)) > 0.995) {
+    return bevel;
+  }
+
   const a1 = add(vertex, nA);
   const a2 = add(vertex, add(nA, scale(dirA, 10)));
+  const nB = scale(perpendicular(dirB), side * halfThick);
   const b1 = add(vertex, nB);
   const b2 = add(vertex, add(nB, scale(dirB, 10)));
-  return lineIntersection(a1, a2, b1, b2) ?? add(vertex, scale(normalize(add(nA, nB)), halfThick));
+  const hit = lineIntersection(a1, a2, b1, b2);
+  if (!hit) return bevel;
+
+  const dist = distance(vertex, hit);
+  if (!Number.isFinite(dist) || dist > maxDist) return bevel;
+
+  return hit;
+}
+
+function squareWallPolygon(
+  wall: { start: Point; end: Point; thickness: number },
+): Point[] {
+  const half = wall.thickness / 2;
+  const dir = normalize(subtract(wall.end, wall.start));
+  const normal = perpendicular(dir);
+  return [
+    add(wall.start, scale(normal, half)),
+    add(wall.end, scale(normal, half)),
+    add(wall.end, scale(normal, -half)),
+    add(wall.start, scale(normal, -half)),
+  ];
+}
+
+function isFinitePoint(p: Point): boolean {
+  return Number.isFinite(p.x) && Number.isFinite(p.y);
+}
+
+function sanitizeWallPolygon(polygon: Point[], wall: { start: Point; end: Point; thickness: number }): Point[] {
+  const len = distance(wall.start, wall.end);
+  const pad = Math.max(wall.thickness * 4, len * 1.5, 1);
+  const minX = Math.min(wall.start.x, wall.end.x) - pad;
+  const maxX = Math.max(wall.start.x, wall.end.x) + pad;
+  const minY = Math.min(wall.start.y, wall.end.y) - pad;
+  const maxY = Math.max(wall.start.y, wall.end.y) + pad;
+
+  const cleaned = polygon.filter((p) => {
+    if (!isFinitePoint(p)) return false;
+    return p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
+  });
+
+  return cleaned.length >= 3 ? cleaned : squareWallPolygon(wall);
 }
 
 export function buildWallPolygon(
   wall: { id: string; start: Point; end: Point; thickness: number },
   allWalls: { id: string; start: Point; end: Point; thickness: number }[],
 ): Point[] {
+  const wallLen = distance(wall.start, wall.end);
+  if (wallLen < 1e-4) return [];
+
   const half = wall.thickness / 2;
   const dir = normalize(subtract(wall.end, wall.start));
   const normal = perpendicular(dir);
+  const maxMiter = maxMiterDistance(half, wallLen);
 
   const startNeighbors = getConnectedWalls(wall.start, wall.id, allWalls);
   const endNeighbors = getConnectedWalls(wall.end, wall.id, allWalls);
@@ -72,8 +138,8 @@ export function buildWallPolygon(
         wall.start,
       ),
     );
-    pStartLeft = miterCorner(wall.start, dir, otherDir, half, 1);
-    pStartRight = miterCorner(wall.start, dir, otherDir, half, -1);
+    pStartLeft = miterCorner(wall.start, dir, otherDir, half, 1, maxMiter);
+    pStartRight = miterCorner(wall.start, dir, otherDir, half, -1, maxMiter);
   }
 
   if (endNeighbors.length > 0) {
@@ -88,11 +154,11 @@ export function buildWallPolygon(
       ),
     );
     const revDir = scale(dir, -1);
-    pEndLeft = miterCorner(wall.end, revDir, otherDir, half, -1);
-    pEndRight = miterCorner(wall.end, revDir, otherDir, half, 1);
+    pEndLeft = miterCorner(wall.end, revDir, otherDir, half, -1, maxMiter);
+    pEndRight = miterCorner(wall.end, revDir, otherDir, half, 1, maxMiter);
   }
 
-  return [pStartLeft, pEndLeft, pEndRight, pStartRight];
+  return sanitizeWallPolygon([pStartLeft, pEndLeft, pEndRight, pStartRight], wall);
 }
 
 export type WallMeshPart = {
@@ -115,7 +181,12 @@ export function splitWallForOpenings(
   }[],
   wallHeight: number,
 ): WallMeshPart[] {
+  const wallLen = distance(wall.start, wall.end);
+  if (wallLen < 1e-4) return [];
+
   const basePoly = buildWallPolygon(wall, allWalls);
+  if (basePoly.length < 3) return [];
+
   const wallOpenings = openings
     .filter((o) => o.wallId === wall.id)
     .sort((a, b) => a.offset - b.offset);
@@ -135,7 +206,9 @@ export function splitWallForOpenings(
       { ...wall, start: s, end: e },
       allWalls,
     );
-    parts.push({ wallId: wall.id, polygon: slicePoly, yMin, yMax });
+    if (slicePoly.length >= 3) {
+      parts.push({ wallId: wall.id, polygon: slicePoly, yMin, yMax });
+    }
   };
 
   let cursor = 0;
@@ -156,7 +229,6 @@ export function splitWallForOpenings(
     cursor = opening.offset + opening.width;
   }
 
-  const wallLen = Math.hypot(wall.end.x - wall.start.x, wall.end.y - wall.start.y);
   addSolidSlice(cursor, wallLen, 0, wallHeight);
 
   return parts;

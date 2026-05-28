@@ -5,6 +5,7 @@ import {
   DEFAULT_SUN_TIME,
   DEFAULT_TRACE_PARAMS,
 } from '../../types/floorPlan';
+import { defaultGridSizeForUnit } from '../units/defaults';
 
 const DB_NAME = 'floorplan-studio';
 const DB_VERSION = 1;
@@ -148,6 +149,7 @@ export async function migrateLegacyLocalStorage(): Promise<SavedProject | null> 
       northAngleDeg: state.northAngleDeg ?? DEFAULT_NORTH_ANGLE_DEG,
       sunTime: state.sunTime ?? DEFAULT_SUN_TIME,
       lotSize: state.lotSize ?? null,
+      gridSize: state.gridSize ?? defaultGridSizeForUnit(state.unit ?? 'ft'),
       backgroundOffset: state.backgroundOffset ?? DEFAULT_BACKGROUND_OFFSET,
       backgroundVisible: state.backgroundVisible ?? true,
     };

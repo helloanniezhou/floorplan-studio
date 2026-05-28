@@ -23,6 +23,32 @@ export function wallEndpointHit(
   return null;
 }
 
+/** Endpoint under cursor; selected walls win over overlap, then top-most (last drawn). */
+export function findWallEndpointHit(
+  walls: Wall[],
+  world: Point,
+  threshold: number,
+  priorityWallIds: string[] = [],
+): { wallId: string; end: 'start' | 'end' } | null {
+  const prioritySet = new Set(priorityWallIds);
+
+  for (const id of priorityWallIds) {
+    const wall = walls.find((w) => w.id === id);
+    if (!wall) continue;
+    const end = wallEndpointHit(world, wall, threshold);
+    if (end) return { wallId: wall.id, end };
+  }
+
+  for (let i = walls.length - 1; i >= 0; i--) {
+    const wall = walls[i];
+    if (prioritySet.has(wall.id)) continue;
+    const end = wallEndpointHit(world, wall, threshold);
+    if (end) return { wallId: wall.id, end };
+  }
+
+  return null;
+}
+
 export function wallsInWorldRect(
   walls: Wall[],
   rect: { minX: number; minY: number; maxX: number; maxY: number },

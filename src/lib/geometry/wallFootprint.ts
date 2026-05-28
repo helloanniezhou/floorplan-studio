@@ -17,6 +17,19 @@ export function wallFootprintPolygon(wall: {
   return [p1, p2, p3, p4];
 }
 
+/** The two long faces of the wall (outer edges parallel to the wall run). */
+export function wallFaceEdgeSegments(wall: {
+  start: Point;
+  end: Point;
+  thickness: number;
+}): [Point, Point][] {
+  const [p1, p2, p3, p4] = wallFootprintPolygon(wall);
+  return [
+    [p1, p2],
+    [p4, p3],
+  ];
+}
+
 export function footprintToDisplayPoints(
   polygon: Point[],
   ppu: number | null,

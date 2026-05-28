@@ -1,4 +1,5 @@
 import { useFloorPlanStore } from '../../store/floorPlanStore';
+import { PlanImageUploadButton } from '../PlanUploadControls';
 
 export function PlanImageSettingsPanel() {
   const backgroundImage = useFloorPlanStore((s) => s.backgroundImage);
@@ -12,15 +13,20 @@ export function PlanImageSettingsPanel() {
 
   if (!backgroundImage) {
     return (
-      <p className="hint">
-        No plan image uploaded. Use <strong>Upload plan</strong> in the top action bar to add a
-        tracing background.
-      </p>
+      <>
+        <p className="hint">
+          Upload a floor plan image to use as a tracing background. After upload, set scale with the
+          Scale tool.
+        </p>
+        <PlanImageUploadButton />
+      </>
     );
   }
 
   return (
     <>
+      <PlanImageUploadButton label="Replace image" />
+
       <p className="hint">
         The uploaded image is for tracing. When you select all walls (⌘A) and drag to reposition on
         the lot, the image moves with them.

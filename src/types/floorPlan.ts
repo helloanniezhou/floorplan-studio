@@ -73,8 +73,11 @@ export type PlaceableDimensions = {
   height: number;
 };
 
+export type FurnitureMount = 'floor' | 'top';
+
 export type FurnitureKind =
   | 'kitchenCounter'
+  | 'kitchenCabinet'
   | 'sink'
   | 'toilet'
   | 'sectionalSofa'
@@ -116,6 +119,8 @@ export type Furniture = PlacedItemBase & {
   kind: FurnitureKind;
   /** Mattress size preset when kind is bed */
   bedSize?: BedSize;
+  /** Vertical mount; defaults from kind (e.g. kitchenCabinet → top). */
+  mount?: FurnitureMount;
 };
 
 export type LandscapeElement = PlacedItemBase & {
@@ -140,6 +145,8 @@ export type FloorPlan = {
   northAngleDeg: number;
   sunTime: SunTime;
   lotSize: LotSize | null;
+  /** Snap and visible grid spacing in plan units (ft or m). */
+  gridSize: number;
 };
 
 export type Selection =
