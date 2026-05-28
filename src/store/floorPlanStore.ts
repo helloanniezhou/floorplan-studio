@@ -36,7 +36,6 @@ import {
   rectangleFromCorners,
   rectangleWallSegments,
 } from '../lib/geometry/rectangle';
-import { traceFloorPlan } from '../lib/opencv/traceFloorPlan';
 import { prepareTraceImage, yieldToMain } from '../lib/opencv/prepareTraceImage';
 import {
   deduplicateLines,
@@ -440,9 +439,9 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       landscape: [],
       suggestions: [],
       selection: null,
+      traceLoading: false,
       traceError: null,
     });
-    void get().runWallTrace();
   },
 
   clearBackground: () => {
@@ -828,13 +827,8 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
     try {
       await yieldToMain();
 
-      let result: LineSuggestion[];
-      try {
-        result = await traceWithWorker(backgroundImage, traceParams, gen);
-      } catch {
-        if (gen !== wallTraceGeneration) return;
-        result = await traceFloorPlan(backgroundImage, traceParams);
-      }
+      // OpenCV runs only in a Web Worker so the editor stays responsive.
+      const result = await traceWithWorker(backgroundImage, traceParams, gen);
 
       if (gen !== wallTraceGeneration) return;
       set({ suggestions: result, traceLoading: false, traceError: null });
