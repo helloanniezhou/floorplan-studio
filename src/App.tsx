@@ -34,28 +34,32 @@ function App() {
 
   return (
     <div className="app">
-      <Toolbar />
-      <div className="main-column">
-        <main className="workspace">
-          <div className="workspace-overlay">
-            <div className="workspace-top-stack">
-              <ActionBar
-                projectsView={projectsView}
-                onToggleProjectsView={() => setProjectsView((prev) => !prev)}
-              />
-              {!show3DPreview && <ScaleDialog />}
-            </div>
-          </div>
-          {show3DPreview ? (
-            <Viewport3D />
-          ) : (
-            <div className="editor-column">
-              <FloorPlanCanvas />
-            </div>
-          )}
-        </main>
+      <header className="app-action-bar-wrap">
+        <ActionBar
+          projectsView={projectsView}
+          onToggleProjectsView={() => setProjectsView((prev) => !prev)}
+        />
+      </header>
+      <div className="app-panels">
+        <Toolbar />
+        <div className="main-column">
+          <main className="workspace">
+            {!show3DPreview && (
+              <div className="workspace-overlay">
+                <ScaleDialog />
+              </div>
+            )}
+            {show3DPreview ? (
+              <Viewport3D />
+            ) : (
+              <div className="editor-column">
+                <FloorPlanCanvas />
+              </div>
+            )}
+          </main>
+        </div>
+        <PropertyPanel />
       </div>
-      <PropertyPanel />
     </div>
   );
 }
