@@ -191,6 +191,61 @@ export function PropertyPanel() {
               }
             />
           </label>
+          {selectedOpening.type === 'door' && (
+            <>
+              <label className="field">
+                <span>Door type</span>
+                <div className="unit-toggle" role="group" aria-label="Door type">
+                  <button
+                    type="button"
+                    className={`unit-toggle-btn ${(selectedOpening.doorStyle ?? 'swing') === 'swing' ? 'active' : ''}`}
+                    onClick={() =>
+                      updateOpening(selectedOpening.id, { doorStyle: 'swing' })
+                    }
+                  >
+                    Swing
+                  </button>
+                  <button
+                    type="button"
+                    className={`unit-toggle-btn ${selectedOpening.doorStyle === 'sliding' ? 'active' : ''}`}
+                    onClick={() =>
+                      updateOpening(selectedOpening.id, { doorStyle: 'sliding' })
+                    }
+                  >
+                    Sliding
+                  </button>
+                </div>
+              </label>
+              {(selectedOpening.doorStyle ?? 'swing') === 'swing' && (
+                <label className="field">
+                  <span>Opens to</span>
+                  <div className="unit-toggle" role="group" aria-label="Door swing side">
+                    <button
+                      type="button"
+                      className={`unit-toggle-btn ${(selectedOpening.doorSwing ?? 'left') === 'left' ? 'active' : ''}`}
+                      onClick={() =>
+                        updateOpening(selectedOpening.id, { doorSwing: 'left' })
+                      }
+                    >
+                      Left side
+                    </button>
+                    <button
+                      type="button"
+                      className={`unit-toggle-btn ${selectedOpening.doorSwing === 'right' ? 'active' : ''}`}
+                      onClick={() =>
+                        updateOpening(selectedOpening.id, { doorSwing: 'right' })
+                      }
+                    >
+                      Right side
+                    </button>
+                  </div>
+                  <p className="hint">
+                    Left / right is relative to the wall direction (start → end).
+                  </p>
+                </label>
+              )}
+            </>
+          )}
           {selectedOpening.type === 'window' && (
             <label className="field">
               <span>Sill height ({unit})</span>

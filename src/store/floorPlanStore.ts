@@ -629,6 +629,9 @@ export const useFloorPlanStore = create<FloorPlanState>()((set, get) => ({
       width: clamped.width,
       height: defaultOpeningHeight(type, unit),
       sillHeight: type === 'window' ? defaultWindowSill(unit) : undefined,
+      ...(type === 'door'
+        ? { doorStyle: 'swing' as const, doorSwing: 'left' as const }
+        : {}),
     };
 
     set({

@@ -41,6 +41,7 @@ import { boundsFromWalls } from '../lib/walls3d/miter';
 import { PlanCompassRose } from './PlanCompassRose';
 import { PlanLotBoundary } from './PlanLotBoundary';
 import { EnclosedAreaReadout } from './EnclosedAreaReadout';
+import { getDoorSymbolGeometry } from '../lib/openings/doorSymbol';
 
 const SNAP_RADIUS = 18;
 const MIN_ZOOM = 0.1;
@@ -809,6 +810,10 @@ export function FloorPlanCanvas() {
               selection?.type === 'opening' && selection.id === opening.id;
             const dir = wallDirection(wall);
             const angle = Math.atan2(dir.y, dir.x);
+            const doorSymbol =
+              opening.type === 'door'
+                ? getDoorSymbolGeometry(wall, opening, ds, de, ppu)
+                : null;
 
             return (
               <Group
@@ -821,17 +826,53 @@ export function FloorPlanCanvas() {
                   strokeWidth={(wall.thickness * (ppu ?? 1) + 2) || 6}
                   lineCap="butt"
                 />
-                {opening.type === 'door' && (
+                {doorSymbol?.kind === 'swing' && (
                   <Arc
-                    x={ds.x}
-                    y={ds.y}
+                    x={doorSymbol.hinge.x}
+                    y={doorSymbol.hinge.y}
                     innerRadius={0}
-                    outerRadius={opening.width * (ppu ?? 1)}
-                    angle={90}
-                    rotation={(angle * 180) / Math.PI}
+                    outerRadius={doorSymbol.radius}
+                    angle={doorSymbol.sweepDeg}
+                    rotation={doorSymbol.rotationDeg}
                     stroke="#64748b"
                     strokeWidth={1.5 / stageScale}
                   />
+                )}
+                {doorSymbol?.kind === 'sliding' && (
+                  <>
+                    <Line
+                      points={[
+                        doorSymbol.track[0].x,
+                        doorSymbol.track[0].y,
+                        doorSymbol.track[1].x,
+                        doorSymbol.track[1].y,
+                      ]}
+                      stroke="#64748b"
+                      strokeWidth={2 / stageScale}
+                    />
+                    <Line
+                      points={[
+                        doorSymbol.panelA[0].x,
+                        doorSymbol.panelA[0].y,
+                        doorSymbol.panelA[1].x,
+                        doorSymbol.panelA[1].y,
+                      ]}
+                      stroke="#64748b"
+                      strokeWidth={1.5 / stageScale}
+                      dash={[5 / stageScale, 4 / stageScale]}
+                    />
+                    <Line
+                      points={[
+                        doorSymbol.panelB[0].x,
+                        doorSymbol.panelB[0].y,
+                        doorSymbol.panelB[1].x,
+                        doorSymbol.panelB[1].y,
+                      ]}
+                      stroke="#64748b"
+                      strokeWidth={1.5 / stageScale}
+                      dash={[5 / stageScale, 4 / stageScale]}
+                    />
+                  </>
                 )}
                 {opening.type === 'window' && (
                   <Line

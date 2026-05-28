@@ -9,6 +9,11 @@ export type Wall = {
 
 export type OpeningType = 'door' | 'window';
 
+/** Swing door opens to the left or right when looking along the wall start → end. */
+export type DoorSwing = 'left' | 'right';
+
+export type DoorStyle = 'swing' | 'sliding';
+
 export type Opening = {
   id: string;
   wallId: string;
@@ -17,6 +22,10 @@ export type Opening = {
   width: number;
   height: number;
   sillHeight?: number;
+  /** Doors only — default swing */
+  doorStyle?: DoorStyle;
+  /** Swing doors only — which side the door opens toward */
+  doorSwing?: DoorSwing;
 };
 
 export type ScaleInfo = {
