@@ -21,6 +21,7 @@ function saveStatusLabel(status: string): string {
 export function ProjectControls() {
   const {
     storageReady,
+    cloudMode,
     projectId,
     projectName,
     saveStatus,
@@ -88,7 +89,11 @@ export function ProjectControls() {
 
         <span
           className={`project-status ${saveStatus === 'error' ? 'error' : 'muted'}`}
-          title="Plans are stored in this browser (IndexedDB)"
+          title={
+            cloudMode
+              ? 'Projects are stored in your Supabase account'
+              : 'Plans are stored in this browser (IndexedDB)'
+          }
         >
           {saveStatusLabel(saveStatus)}
         </span>

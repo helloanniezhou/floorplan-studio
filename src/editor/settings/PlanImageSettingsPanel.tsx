@@ -9,8 +9,8 @@ export function PlanImageSettingsPanel() {
   if (!backgroundImage) {
     return (
       <p className="hint">
-        No plan image uploaded. Use <strong>Upload plan</strong> in the toolbar to add a tracing
-        background.
+        No plan image uploaded. Use <strong>Upload plan</strong> in the top action bar to add a
+        tracing background.
       </p>
     );
   }
