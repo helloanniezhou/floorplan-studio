@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { Toolbar } from './editor/Toolbar';
 import { ActionBar } from './editor/ActionBar';
 import { PropertyPanel } from './editor/PropertyPanel';
@@ -41,38 +42,44 @@ function App() {
 
   if (projectsView) {
     return (
-      <div className="app app--projects-only">
-        <ProjectsPage onProjectOpened={() => setProjectsView(false)} standalone />
-      </div>
+      <>
+        <div className="app app--projects-only">
+          <ProjectsPage onProjectOpened={() => setProjectsView(false)} standalone />
+        </div>
+        <Analytics />
+      </>
     );
   }
 
   return (
-    <div className="app">
-      <header className="app-action-bar-wrap">
-        <ActionBar onBackToProjects={() => setProjectsView(true)} />
-      </header>
-      <div className={`app-panels ${show3DPreview ? 'app-panels--3d' : ''}`}>
-        {!show3DPreview && <Toolbar />}
-        <div className="main-column">
-          <main className={`workspace ${show3DPreview ? 'workspace--3d' : ''}`}>
-            {!show3DPreview && (
-              <div className="workspace-overlay">
-                <ScaleDialog />
-              </div>
-            )}
-            {show3DPreview ? (
-              <Viewport3D />
-            ) : (
-              <div className="editor-column">
-                <FloorPlanCanvas />
-              </div>
-            )}
-          </main>
+    <>
+      <div className="app">
+        <header className="app-action-bar-wrap">
+          <ActionBar onBackToProjects={() => setProjectsView(true)} />
+        </header>
+        <div className={`app-panels ${show3DPreview ? 'app-panels--3d' : ''}`}>
+          {!show3DPreview && <Toolbar />}
+          <div className="main-column">
+            <main className={`workspace ${show3DPreview ? 'workspace--3d' : ''}`}>
+              {!show3DPreview && (
+                <div className="workspace-overlay">
+                  <ScaleDialog />
+                </div>
+              )}
+              {show3DPreview ? (
+                <Viewport3D />
+              ) : (
+                <div className="editor-column">
+                  <FloorPlanCanvas />
+                </div>
+              )}
+            </main>
+          </div>
+          {!show3DPreview && <PropertyPanel />}
         </div>
-        {!show3DPreview && <PropertyPanel />}
       </div>
-    </div>
+      <Analytics />
+    </>
   );
 }
 
